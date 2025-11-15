@@ -7,15 +7,20 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
     return res.status(405).json({ success: false, error: "Method Not Allowed" });
   }
 
   try {
-    // Read raw body
     const rawBody = (await buffer(req)).toString();
-
-    // Parse JSON
     const data = JSON.parse(rawBody);
 
     const { name, phone, address, note, delivery, variant_id } = data;
@@ -27,11 +32,9 @@ export default async function handler(req, res) {
       });
     }
 
-    // Shopify API Credentials
     const store = process.env.SHOPIFY_STORE_DOMAIN;
     const token = process.env.SHOPIFY_ADMIN_API;
 
-    // Convert to proper Shopify format
     const orderPayload = {
       order: {
         line_items: [
@@ -66,7 +69,6 @@ export default async function handler(req, res) {
       },
     };
 
-    // Shopify API request
     const response = await fetch(
       `https://${store}/admin/api/2024-10/orders.json`,
       {
