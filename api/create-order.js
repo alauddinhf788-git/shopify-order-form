@@ -1,3 +1,4 @@
+// api/create-order.js
 import { buffer } from "micro";
 
 export const config = {
@@ -7,97 +8,130 @@ export const config = {
 };
 
 export default async function handler(req, res) {
+  // CORS (allow from anywhere for testing; tighten later if needed)
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
+  if (req.method === "OPTIONS") return res.status(200).end();
   if (req.method !== "POST") {
-    return res.status(405).json({ success: false, error: "Method Not Allowed" });
+    return res.status(405).json({ success: false, error: "Only POST allowed" });
   }
 
   try {
-    const rawBody = (await buffer(req)).toString();
-    const data = JSON.parse(rawBody);
+    // Read raw body safely
+    const raw = (await buffer(req)).toString();
+    let body;
+    try {
+      body = raw ? JSON.parse(raw) : {};
+    } catch (e) {
+      return res.status(400).json({ success: false, error: "Invalid JSON body" });
+    }
 
-    const { name, phone, address, note, delivery, variant_id } = data;
+    // Read fields exactly as frontend sends them
+    const {
+      name,
+      phone,
+      address,
+      note = "",
+      delivery = "0",
+      variant_id
+    } = body || {};
 
+    // Validate required fields (matches frontend)
     if (!name || !phone || !address || !variant_id) {
       return res.status(400).json({
         success: false,
-        error: "Required fields missing!",
+        error: "Missing required fields: name, phone, address, variant_id"
       });
     }
 
-    const store = process.env.SHOPIFY_STORE_DOMAIN;
-    const token = process.env.SHOPIFY_ADMIN_API;
+    // Environment variables (support common variants)
+    const SHOP_DOMAIN = process.env.SHOPIFY_STORE_DOMAIN;
+    const SHOP_TOKEN =
+      process.env.SHOPIFY_ADMIN_TOKEN ||
+      process.env.SHOPIFY_ADMIN_API ||
+      process.env.SHOPIFY_ADMIN;
 
+    if (!SHOP_DOMAIN || !SHOP_TOKEN) {
+      return res.status(500).json({
+        success: false,
+        error: "Server misconfiguration: SHOPIFY_STORE_DOMAIN or admin token missing"
+      });
+    }
+
+    // Normalize values
+    const variantIdNum = Number(variant_id);
+    const deliveryAmount = Number(delivery || 0);
+    const deliveryPrice = Number.isFinite(deliveryAmount)
+      ? deliveryAmount.toFixed(2)
+      : "0.00";
+
+    // Build Shopify order payload (will include customer & addresses)
     const orderPayload = {
       order: {
         line_items: [
           {
-            variant_id: Number(variant_id),
-            quantity: 1,
-          },
+            variant_id: variantIdNum,
+            quantity: 1
+          }
         ],
-        shipping_lines: [
-          {
-            price: delivery,
-            title: "Delivery Charge",
-          },
-        ],
-        customer: {
-          first_name: name,
-          phone: phone,
-        },
         billing_address: {
-          address1: address,
-          phone: phone,
           first_name: name,
+          phone: phone,
+          address1: address,
+          country: "Bangladesh"
         },
         shipping_address: {
-          address1: address,
-          phone: phone,
           first_name: name,
+          phone: phone,
+          address1: address,
+          country: "Bangladesh"
         },
-        tags: "LP-Order",
         note: note || "",
+        tags: ["Landing Page Order"],
         financial_status: "pending",
-      },
+        payment_gateway_names: ["Cash on Delivery"],
+        shipping_lines: [
+          {
+            title: "Delivery Charge",
+            price: deliveryPrice,
+            code: "DELIVERY_FEE",
+            source: "custom"
+          }
+        ]
+      }
     };
 
-    const response = await fetch(
-      `https://${store}/admin/api/2024-10/orders.json`,
-      {
-        method: "POST",
-        headers: {
-          "X-Shopify-Access-Token": token,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(orderPayload),
-      }
-    );
+    // Send request to Shopify admin API
+    const shopifyUrl = `https://${SHOP_DOMAIN}/admin/api/2024-10/orders.json`;
+    const resp = await fetch(shopifyUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": SHOP_TOKEN,
+        Accept: "application/json"
+      },
+      body: JSON.stringify(orderPayload)
+    });
 
-    const shopifyRes = await response.json();
+    const result = await resp.json();
 
-    if (!response.ok) {
-      return res.status(500).json({
+    if (!resp.ok) {
+      // forward Shopify's status + error body
+      return res.status(resp.status || 500).json({
         success: false,
-        error: shopifyRes,
+        error: result || "Shopify API error"
       });
     }
 
+    // Success → return created order
     return res.status(200).json({
       success: true,
-      order: shopifyRes.order,
+      order: result.order || result
     });
-  } catch (error) {
-    return res.status(500).json({
-      success: false,
-      error: error.message,
-    });
+  } catch (err) {
+    console.error("create-order error:", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
   }
 }
