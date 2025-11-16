@@ -28,7 +28,7 @@ export default async function handler(req, res) {
         customer: {
           first_name: name,
           phone: phone,
-        
+          address: address,
         },
 
         line_items: [
