@@ -25,25 +25,33 @@ export default async function handler(req, res) {
     // ORDER PAYLOAD
     const orderPayload = {
       order: {
+        customer: {
+          first_name: name,
+          phone: phone,
+          email: `${phone}@example.com`
+        },
+
         line_items: [
           {
             variant_id: Number(variant_id),
             quantity: 1
           }
         ],
+
         billing_address: {
           first_name: name,
           phone: phone,
           address1: address
         },
+
         shipping_address: {
           first_name: name,
           phone: phone,
           address1: address
         },
+
         note: note,
         tags: `LandingPage, Delivery-${delivery_charge}`,
-        email: `${phone}@example.com`,
         financial_status: "pending",
 
         shipping_lines: [
