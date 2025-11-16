@@ -43,7 +43,7 @@ export default async function handler(req, res) {
     };
 
     const response = await fetch(
-      `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2024-10/orders.json`,
+      "https://1jq6bu-kr.myshopify.com/admin/api/2024-01/orders.json",
       {
         method: "POST",
         headers: {
