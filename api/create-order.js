@@ -1,9 +1,20 @@
+// api/create-order.js
 export default async function handler(req, res) {
-  // --- CORS FIX ---
-  res.setHeader("Access-Control-Allow-Origin", "https://comillastore.com");
+  // Allow CORS for your storefront(s)
+  const allowedOrigins = [
+    process.env.ALLOWED_ORIGIN,               // e.g. https://comillastore.com
+    process.env.ALLOWED_ORIGIN_WWW || null    // optional: https://www.comillastore.com
+  ].filter(Boolean);
+
+  const origin = req.headers.origin || "";
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+  }
+  // allow credentials only if you need them (not needed here)
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
+  // handle preflight
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
@@ -13,10 +24,22 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { name, phone, address, note, variant_id, delivery_charge, product_price } = req.body;
+    const {
+      name,
+      phone,
+      address,
+      note,
+      variant_id,
+      delivery_charge,   // string or number
+      product_price      // string or number (unit price)
+    } = req.body;
 
-    const totalPrice = Number(product_price) + Number(delivery_charge);
+    // basic validation
+    if (!variant_id) {
+      return res.status(400).json({ error: "variant_id is required" });
+    }
 
+    // build order payload for Shopify
     const orderPayload = {
       order: {
         line_items: [
@@ -26,53 +49,56 @@ export default async function handler(req, res) {
           }
         ],
         customer: {
-          first_name: name
+          first_name: name || "Customer"
         },
         billing_address: {
-          address1: address,
-          phone: phone,
-          first_name: name
+          first_name: name || "Customer",
+          phone: phone || "",
+          address1: address || ""
         },
         shipping_address: {
-          address1: address,
-          phone: phone,
-          first_name: name
+          first_name: name || "Customer",
+          phone: phone || "",
+          address1: address || ""
         },
-        note: note,
+        note: note || "",
         financial_status: "pending",
-        tags: `Custom-Order, DeliveryCharge-${delivery_charge}`,
+        tags: `LandingPage, Delivery-${delivery_charge || 0}`,
+        // put delivery charge into shipping_lines (Shopify expects shipping_lines array)
         shipping_lines: [
           {
-            price: delivery_charge,
-            title: "Delivery Charge"
+            title: "Delivery Charge",
+            price: String(delivery_charge || "0.00")
           }
         ]
       }
     };
 
-    const response = await fetch(
-      "https://1jq6bu-kr.myshopify.com/admin/api/2025-01/orders.json",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Shopify-Access-Token": process.env.SHOPIFY_ACCESS_TOKEN
-        },
-        body: JSON.stringify(orderPayload)
-      }
-    );
+    // Use the API version supported by your store; per your screenshots use 2025-10
+    const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
+    const adminToken = process.env.SHOPIFY_ADMIN_API;
+    const apiUrl = `https://${storeDomain}/admin/api/2025-10/orders.json`;
+
+    const response = await fetch(apiUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Shopify-Access-Token": adminToken
+      },
+      body: JSON.stringify(orderPayload)
+    });
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.log("Shopify Error:", data);
-      return res.status(500).json({ error: "Shopify Error", details: data });
+      console.error("Shopify API error:", response.status, data);
+      return res.status(500).json({ error: "Shopify API error", details: data });
     }
 
-    return res.status(200).json({ success: true, order: data });
-
-  } catch (error) {
-    console.error("Server Error:", error);
-    return res.status(500).json({ error: "Server Error" });
+    // success
+    return res.status(200).json({ success: true, order: data.order });
+  } catch (err) {
+    console.error("Server error:", err);
+    return res.status(500).json({ error: "Server error", details: String(err) });
   }
 }
