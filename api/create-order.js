@@ -1,8 +1,7 @@
 export default async function handler(req, res) {
-
   // CORS SETTINGS
   res.setHeader("Access-Control-Allow-Origin", process.env.ALLOWED_ORIGIN);
-  res.setHeader("Access-Control-Allow-Methods", "POST");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
   if (req.method === "OPTIONS") {
@@ -10,7 +9,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Only POST requests allowed" });
+    return res.status(405).json({ error: "Only POST allowed" });
   }
 
   try {
@@ -56,7 +55,7 @@ export default async function handler(req, res) {
       }
     };
 
-    // SHOPIFY CALL (✔ Corrected)
+    // SHOPIFY API CALL
     const response = await fetch(
       `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01/orders.json`,
       {
@@ -77,12 +76,12 @@ export default async function handler(req, res) {
     }
 
     return res.status(200).json({
-      message: "Order created successfully",
+      success: true,
       order: data
     });
 
   } catch (err) {
     console.error("Server Error:", err);
-    return res.status(500).json({ error: "Something went wrong" });
+    return res.status(500).json({ error: "Server failed" });
   }
 }
