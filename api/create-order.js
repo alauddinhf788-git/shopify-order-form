@@ -1,27 +1,23 @@
 export default async function handler(req, res) {
+  // --- CORS FIX ---
+  res.setHeader("Access-Control-Allow-Origin", "https://comillastore.com");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-res.setHeader("Access-Control-Allow-Origin", process.env.ALLOWED_ORIGIN);
-res.setHeader("Access-Control-Allow-Methods", "POST");
-res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Only POST allowed" });
+    return res.status(405).json({ error: "Method Not Allowed" });
   }
 
   try {
-    const {
-      name,
-      phone,
-      address,
-      note,
-      variant_id,
-      delivery_charge,
-      product_price
-    } = req.body;
+    const { name, phone, address, note, variant_id, delivery_charge, product_price } = req.body;
 
-    const total_price = Number(product_price) + Number(delivery_charge);
+    const totalPrice = Number(product_price) + Number(delivery_charge);
 
-    const orderData = {
+    const orderPayload = {
       order: {
         line_items: [
           {
@@ -29,33 +25,40 @@ res.setHeader("Access-Control-Allow-Headers", "Content-Type");
             quantity: 1
           }
         ],
+        customer: {
+          first_name: name
+        },
         billing_address: {
-          name: name,
+          address1: address,
           phone: phone,
-          address1: address
+          first_name: name
         },
         shipping_address: {
-          name: name,
+          address1: address,
           phone: phone,
-          address1: address
+          first_name: name
         },
-        note: `Customer Note: ${note}`,
-        tags: "COD Order, Landing Page",
+        note: note,
         financial_status: "pending",
-        currency: "BDT",
-        total_price: total_price
+        tags: `Custom-Order, DeliveryCharge-${delivery_charge}`,
+        shipping_lines: [
+          {
+            price: delivery_charge,
+            title: "Delivery Charge"
+          }
+        ]
       }
     };
 
     const response = await fetch(
-      "https://1jq6bu-kr.myshopify.com/admin/api/2024-01/orders.json",
+      "https://1jq6bu-kr.myshopify.com/admin/api/2025-01/orders.json",
       {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API
+          "X-Shopify-Access-Token": process.env.SHOPIFY_ACCESS_TOKEN
         },
-        body: JSON.stringify(orderData)
+        body: JSON.stringify(orderPayload)
       }
     );
 
@@ -63,17 +66,13 @@ res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
     if (!response.ok) {
       console.log("Shopify Error:", data);
-      return res.status(500).json({ error: data });
+      return res.status(500).json({ error: "Shopify Error", details: data });
     }
 
-    return res.status(200).json({
-      success: true,
-      message: "Order Created Successfully",
-      order_id: data.order.id
-    });
+    return res.status(200).json({ success: true, order: data });
 
-  } catch (err) {
-    console.error("Server Error:", err);
-    return res.status(500).json({ error: "Something went wrong" });
+  } catch (error) {
+    console.error("Server Error:", error);
+    return res.status(500).json({ error: "Server Error" });
   }
 }
