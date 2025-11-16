@@ -1,51 +1,44 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Only POST allowed" });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
+  const { name, phone, address, note, delivery_charge } = req.body;
+
   try {
-    const {
-      name,
-      phone,
-      address,
-      product_title,
-      product_price,
-      delivery_charge
-    } = req.body;
-
-    // Phone validation (must be ≥ 11 digits)
-    if (!phone || phone.length < 11) {
-      return res.status(400).json({
-        success: false,
-        message: "ফোন নাম্বার সঠিক নয় (কমপক্ষে ১১ ডিজিট হতে হবে)"
-      });
-    }
-
-    const totalPrice = Number(product_price) + Number(delivery_charge);
-
-    const orderPayload = {
+    const orderData = {
       order: {
+        email: "noemail@placeholder.com",
+        phone: phone,
+        billing_address: {
+          name: name,
+          phone: phone,
+          address1: address
+        },
+        shipping_address: {
+          name: name,
+          phone: phone,
+          address1: address
+        },
+        note: note,
+        tags: "COD, Custom Order",
+        
+        financial_status: "pending",
+
         line_items: [
           {
-            title: product_title,
-            quantity: 1,
-            price: totalPrice.toString()
+            title: "Sunglass Order",
+            price: "750",
+            quantity: 1
           }
         ],
-        shipping_address: {
-          first_name: name,
-          address1: address,
-          phone: phone,
-          country: "Bangladesh"
-        },
-        billing_address: {
-          first_name: name,
-          address1: address,
-          phone: phone,
-          country: "Bangladesh"
-        },
-        note: `Phone: ${phone} | Address: ${address} | Delivery Charge: ${delivery_charge}`,
-        financial_status: "pending"
+
+        shipping_lines: [
+          {
+            title: "Delivery Charge",
+            price: delivery_charge
+          }
+        ]
       }
     };
 
@@ -57,23 +50,23 @@ export default async function handler(req, res) {
           "Content-Type": "application/json",
           "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API
         },
-        body: JSON.stringify(orderPayload)
+        body: JSON.stringify(orderData)
       }
     );
 
     const data = await response.json();
 
-    if (!response.ok) {
-      console.log("Shopify Error:", result);  // ← লগ যোগ করা হলো
+    if (data.errors) {
+      console.log("Shopify Error:", data);
       return res.status(500).json({ error: data });
     }
 
-    res.status(200).json({
-      success: true,
-      message: "Order created successfully!",
+    return res.status(200).json({
+      message: "অর্ডার সফলভাবে কনফার্ম হয়েছে!",
       order: data.order
     });
-  } catch (err) {
-    res.status(500).json({ error: err.toString() });
+
+  } catch (error) {
+    return res.status(500).json({ error: error.toString() });
   }
 }
