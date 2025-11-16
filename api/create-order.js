@@ -1,26 +1,16 @@
-// api/create-order.js
 export default async function handler(req, res) {
-  // Allow CORS for your storefront(s)
-  const allowedOrigins = [
-    process.env.ALLOWED_ORIGIN,               // e.g. https://comillastore.com
-    process.env.ALLOWED_ORIGIN_WWW || null    // optional: https://www.comillastore.com
-  ].filter(Boolean);
-
-  const origin = req.headers.origin || "";
-  if (allowedOrigins.includes(origin)) {
-    res.setHeader("Access-Control-Allow-Origin", origin);
-  }
-  // allow credentials only if you need them (not needed here)
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  // CORS SETTINGS
+  res.setHeader("Access-Control-Allow-Origin", process.env.ALLOWED_ORIGIN);
+  res.setHeader("Access-Control-Allow-Methods", "POST");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  // handle preflight
   if (req.method === "OPTIONS") {
     return res.status(200).end();
   }
 
+  // ONLY POST ALLOWED
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method Not Allowed" });
+    return res.status(405).json({ error: "Only POST requests allowed" });
   }
 
   try {
@@ -29,76 +19,71 @@ export default async function handler(req, res) {
       phone,
       address,
       note,
-      variant_id,
-      delivery_charge,   // string or number
-      product_price      // string or number (unit price)
+      delivery_charge,
+      variant_id
     } = req.body;
 
-    // basic validation
-    if (!variant_id) {
-      return res.status(400).json({ error: "variant_id is required" });
-    }
-
-    // build order payload for Shopify
-
+    // 🟩 INSERT THIS PAYLOAD EXACTLY HERE
     const orderPayload = {
-  order: {
-    line_items: [
-      {
-        variant_id: Number(variant_id),
-        quantity: 1
+      order: {
+        line_items: [
+          {
+            variant_id: Number(variant_id),
+            quantity: 1
+          }
+        ],
+        billing_address: {
+          first_name: name,
+          phone: phone,
+          address1: address
+        },
+        shipping_address: {
+          first_name: name,
+          phone: phone,
+          address1: address
+        },
+        note: note,
+        tags: `LandingPage, Delivery-${delivery_charge}`,
+        email: `${phone}@example.com`,
+        financial_status: "pending",
+
+        shipping_lines: [
+          {
+            title: "Delivery Charge",
+            price: String(delivery_charge)
+          }
+        ]
       }
-    ],
-    billing_address: {
-      first_name: name,
-      phone: phone,
-      address1: address
-    },
-    shipping_address: {
-      first_name: name,
-      phone: phone,
-      address1: address
-    },
-    note: note,
-    tags: `LandingPage, Delivery-${delivery_charge}`,
-    email: `${phone}@example.com`,  // Shopify requires unique email for customer
-    financial_status: "pending",
+    };
+    // 🟩 payload ends here
 
-    shipping_lines: [
+    // SHOPIFY API CALL
+    const response = await fetch(
+      `https://${process.env.SHOPIFY_STORE_URL}/admin/api/2025-01/orders.json`,
       {
-        title: "Delivery Charge",
-        price: String(delivery_charge)
+        method: "POST",
+        headers: {
+          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API_KEY,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(orderPayload)
       }
-    ]
-  }
-};
-
-
-    // Use the API version supported by your store; per your screenshots use 2025-10
-    const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
-    const adminToken = process.env.SHOPIFY_ADMIN_API;
-    const apiUrl = `https://${storeDomain}/admin/api/2025-10/orders.json`;
-
-    const response = await fetch(apiUrl, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "X-Shopify-Access-Token": adminToken
-      },
-      body: JSON.stringify(orderPayload)
-    });
+    );
 
     const data = await response.json();
 
     if (!response.ok) {
-      console.error("Shopify API error:", response.status, data);
-      return res.status(500).json({ error: "Shopify API error", details: data });
+      console.log("Shopify Error:", data);
+      return res.status(500).json({ error: data });
     }
 
-    // success
-    return res.status(200).json({ success: true, order: data.order });
+    return res.status(200).json({
+      message: "Order created successfully",
+      order: data
+    });
+
   } catch (err) {
-    console.error("Server error:", err);
-    return res.status(500).json({ error: "Server error", details: String(err) });
+    console.error("Server Error:", err);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 }
