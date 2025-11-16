@@ -1,24 +1,20 @@
 // api/create-order.js
+// Vercel Node serverless (Next.js API style). Uses default bodyParser (JSON).
 
 export const config = {
   api: {
-    bodyParser: true,
-  },
+    bodyParser: true
+  }
 };
 
 export default async function handler(req, res) {
-  // CORS (allow any origin)
+  // CORS
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Only POST allowed" });
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
+  if (req.method !== "POST") return res.status(405).json({ success: false, error: "Only POST allowed" });
 
   try {
     const {
@@ -28,72 +24,104 @@ export default async function handler(req, res) {
       note,
       delivery,
       variant_id,
-    } = req.body;
+      product_title,
+      product_price
+    } = req.body || {};
 
+    // Basic validation
     if (!name || !phone || !address || !delivery || !variant_id) {
-      return res.status(400).json({ error: "Missing required fields" });
+      return res.status(400).json({ success: false, error: "Missing required fields" });
     }
 
-    // Shopify credentials
-    const shop = process.env.SHOPIFY_STORE_DOMAIN;
-    const token = process.env.SHOPIFY_ADMIN_API;
+    // Env vars (set these in Vercel: SHOPIFY_STORE_DOMAIN and SHOPIFY_ADMIN_API)
+    const SHOP = process.env.SHOPIFY_STORE_DOMAIN;
+    const TOKEN = process.env.SHOPIFY_ADMIN_API || process.env.SHOPIFY_ADMIN_TOKEN || process.env.SHOPIFY_ADMIN;
 
-    if (!shop || !token) {
-      return res.status(500).json({ error: "Missing ENV variables" });
+    if (!SHOP || !TOKEN) {
+      return res.status(500).json({ success: false, error: "Server misconfiguration: SHOPIFY_STORE_DOMAIN or admin token missing" });
     }
 
-    // Prepare order data
-    const orderData = {
+    // Normalize phone: ensure starts with +880 if looks like Bangladesh local
+    let normalizedPhone = String(phone).trim();
+    const digits = normalizedPhone.replace(/\D/g,'');
+    if (digits.length === 11 && digits.startsWith("01")) {
+      normalizedPhone = "+880" + digits.slice(1);
+    } else if (digits.length === 13 && digits.startsWith("880")) {
+      normalizedPhone = "+" + digits;
+    } else if (normalizedPhone.startsWith("+")) {
+      // assume ok
+    } else {
+      // fallback to digits-only
+      normalizedPhone = digits;
+    }
+
+    // Build Shopify order payload
+    // We'll NOT create a separate 'customer' record to avoid duplicate-phone conflicts.
+    const orderPayload = {
       order: {
         line_items: [
           {
             variant_id: Number(variant_id),
-            quantity: 1
+            quantity: 1,
+            // optional: price override
+            // price: Number(product_price).toFixed(2)
           }
         ],
-        customer: {
-          first_name: name,
-          phone: phone
-        },
         billing_address: {
           first_name: name,
+          phone: normalizedPhone,
           address1: address,
-          phone: phone,
+          country: "Bangladesh"
         },
         shipping_address: {
           first_name: name,
+          phone: normalizedPhone,
           address1: address,
-          phone: phone,
+          country: "Bangladesh"
         },
-        note: note ? `${note} | Delivery Charge: ${delivery}` : `Delivery Charge: ${delivery}`,
-        tags: `Custom-Order-Form`,
+        note: note || "",
+        tags: ["Landing Page Order"],
+        financial_status: "pending",
+        payment_gateway_names: ["Cash on Delivery"],
+        shipping_lines: [
+          {
+            title: "Delivery Charge",
+            price: Number(delivery).toFixed(2),
+            code: "DELIVERY_FEE",
+            source: "custom"
+          }
+        ]
       }
     };
 
-    // Call Shopify Admin API
-    const response = await fetch(`https://${shop}/admin/api/2024-10/orders.json`, {
+    // If product_title/product_price provided and you WANT a separate "Delivery" line as product,
+    // you could also push an additional line_items entry; but shipping_lines is the correct approach
+    // to show shipping + include in totals.
+
+    const shopifyUrl = `https://${SHOP}/admin/api/2024-10/orders.json`;
+
+    const shopifyRes = await fetch(shopifyUrl, {
       method: "POST",
       headers: {
-        "X-Shopify-Access-Token": token,
-        "Content-Type": "application/json"
+        "X-Shopify-Access-Token": TOKEN,
+        "Content-Type": "application/json",
+        "Accept": "application/json"
       },
-      body: JSON.stringify(orderData)
+      body: JSON.stringify(orderPayload)
     });
 
-    const result = await response.json();
+    const shopifyData = await shopifyRes.json();
 
-    if (!response.ok) {
-      return res.status(500).json({ error: result });
+    if (!shopifyRes.ok) {
+      // return error details for easier debugging
+      return res.status(shopifyRes.status || 500).json({ success: false, error: shopifyData || "Shopify API error" });
     }
 
-    return res.status(200).json({
-      success: true,
-      order: result.order
-    });
+    // Success
+    return res.status(200).json({ success: true, order: shopifyData.order || shopifyData });
 
   } catch (err) {
-    return res.status(500).json({
-      error: "Server error: " + err.message
-    });
+    console.error("create-order error:", err);
+    return res.status(500).json({ success: false, error: err.message || String(err) });
   }
 }
