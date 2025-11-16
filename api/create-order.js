@@ -40,39 +40,39 @@ export default async function handler(req, res) {
     }
 
     // build order payload for Shopify
+
     const orderPayload = {
-      order: {
-        line_items: [
-          {
-            variant_id: Number(variant_id),
-            quantity: 1
-          }
-        ],
-        customer: {
-          first_name: name || "Customer"
-        },
-        billing_address: {
-          first_name: name || "Customer",
-          phone: phone || "",
-          address1: address || ""
-        },
-        shipping_address: {
-          first_name: name || "Customer",
-          phone: phone || "",
-          address1: address || ""
-        },
-        note: note || "",
-        financial_status: "pending",
-        tags: `LandingPage, Delivery-${delivery_charge || 0}`,
-        // put delivery charge into shipping_lines (Shopify expects shipping_lines array)
-        shipping_lines: [
-          {
-            title: "Delivery Charge",
-            price: String(delivery_charge || "0.00")
-          }
-        ]
+  order: {
+    line_items: [
+      {
+        variant_id: Number(variant_id),
+        quantity: 1
       }
-    };
+    ],
+    billing_address: {
+      first_name: name,
+      phone: phone,
+      address1: address
+    },
+    shipping_address: {
+      first_name: name,
+      phone: phone,
+      address1: address
+    },
+    note: note,
+    tags: `LandingPage, Delivery-${delivery_charge}`,
+    email: `${phone}@example.com`,  // Shopify requires unique email for customer
+    financial_status: "pending",
+
+    shipping_lines: [
+      {
+        title: "Delivery Charge",
+        price: String(delivery_charge)
+      }
+    ]
+  }
+};
+
 
     // Use the API version supported by your store; per your screenshots use 2025-10
     const storeDomain = process.env.SHOPIFY_STORE_DOMAIN;
