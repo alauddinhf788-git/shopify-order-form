@@ -1,4 +1,5 @@
 export default async function handler(req, res) {
+
   // CORS SETTINGS
   res.setHeader("Access-Control-Allow-Origin", process.env.ALLOWED_ORIGIN);
   res.setHeader("Access-Control-Allow-Methods", "POST");
@@ -8,7 +9,6 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // ONLY POST ALLOWED
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST requests allowed" });
   }
@@ -23,7 +23,7 @@ export default async function handler(req, res) {
       variant_id
     } = req.body;
 
-    // 🟩 INSERT THIS PAYLOAD EXACTLY HERE
+    // ORDER PAYLOAD
     const orderPayload = {
       order: {
         line_items: [
@@ -55,15 +55,14 @@ export default async function handler(req, res) {
         ]
       }
     };
-    // 🟩 payload ends here
 
-    // SHOPIFY API CALL
+    // SHOPIFY CALL (✔ Corrected)
     const response = await fetch(
-      `https://${process.env.SHOPIFY_STORE_URL}/admin/api/2025-01/orders.json`,
+      `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01/orders.json`,
       {
         method: "POST",
         headers: {
-          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API_KEY,
+          "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API_ACCESS_TOKEN,
           "Content-Type": "application/json"
         },
         body: JSON.stringify(orderPayload)
