@@ -64,6 +64,7 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
+      console.log("Shopify Error:", result);  // ← লগ যোগ করা হলো
       return res.status(500).json({ error: data });
     }
 
