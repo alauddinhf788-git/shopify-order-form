@@ -1,0 +1,183 @@
+<style>
+  .order-wrapper {
+    max-width: 650px;
+    margin: auto;
+    background: #f7f8fa;
+    padding: 25px;
+    border-radius: 12px;
+  }
+
+  .order-title {
+    text-align: center;
+    font-size: 28px;
+    font-weight: 700;
+    margin-bottom: 25px;
+  }
+
+  .form-group {
+    margin-bottom: 18px;
+  }
+
+  label {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 5px;
+    display: block;
+  }
+
+  input, textarea {
+    width: 100%;
+    padding: 14px;
+    border: 1px solid #d7d7d7;
+    border-radius: 8px;
+    font-size: 16px;
+    background: white;
+  }
+
+  textarea {
+    min-height: 110px;
+  }
+
+  .delivery-box {
+    background: white;
+    padding: 15px;
+    border-radius: 10px;
+    border: 1px solid #e2e2e2;
+  }
+
+  .delivery-option {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 5px;
+  }
+
+  .delivery-option input {
+    width: auto;
+    margin-right: 10px;
+  }
+
+  .delivery-label {
+    display: flex;
+    align-items: center;
+    font-size: 17px;
+    font-weight: 600;
+  }
+
+  .submit-btn {
+    width: 100%;
+    background: black;
+    color: white;
+    padding: 18px 10px;
+    text-align: center;
+    font-size: 20px;
+    font-weight: 700;
+    border-radius: 10px;
+    border: none;
+    cursor: pointer;
+    margin-top: 10px;
+  }
+</style>
+
+<div class="order-wrapper">
+  <div class="order-title">অর্ডার ফর্ম</div>
+
+  <!-- Customer Name -->
+  <div class="form-group">
+    <label>নাম লিখুন *</label>
+    <input type="text" id="customer_name" placeholder="আপনার নাম লিখুন">
+  </div>
+
+  <!-- Phone -->
+  <div class="form-group">
+    <label>ফোন নম্বর *</label>
+    <input type="text" id="customer_phone" placeholder="01XXXXXXXXX">
+  </div>
+
+  <!-- Address -->
+  <div class="form-group">
+    <label>সম্পূর্ণ ঠিকানা *</label>
+    <textarea id="customer_address" placeholder="বাড়ি, গ্রাম, উপজেলা, জেলা"></textarea>
+  </div>
+
+  <!-- Notes -->
+  <div class="form-group">
+    <label>সানগ্রাসের কোড / নোট *</label>
+    <input type="text" id="customer_note" placeholder="কোন সানগ্লাসটি নেবেন এবং কোডটি?">
+  </div>
+
+  <!-- Delivery Charges -->
+  <div class="form-group">
+    <label>ডেলিভারি চার্জ *</label>
+    <div class="delivery-box">
+      
+      <div class="delivery-option">
+        <label class="delivery-label">
+          <input type="radio" name="delivery" value="60" checked>
+          ঢাকার ভিতরে
+        </label>
+        <span>৳60</span>
+      </div>
+
+      <div class="delivery-option">
+        <label class="delivery-label">
+          <input type="radio" name="delivery" value="120">
+          ঢাকার বাইরে
+        </label>
+        <span>৳120</span>
+      </div>
+
+    </div>
+  </div>
+
+  <button class="submit-btn" id="orderButton">অর্ডার কনফার্ম করুন - ৳750</button>
+</div>
+
+<script>
+  const productPrice = 690; 
+  const variantId = "41887969345639";
+
+  function updateButtonPrice() {
+    const delivery = document.querySelector("input[name='delivery']:checked").value;
+    const total = productPrice + parseInt(delivery);
+    document.getElementById("orderButton").innerText = `অর্ডার কনফার্ম করুন - ৳${total}`;
+  }
+
+  document.querySelectorAll("input[name='delivery']").forEach(radio => {
+    radio.addEventListener("change", updateButtonPrice);
+  });
+
+  updateButtonPrice();
+
+  document.getElementById("orderButton").addEventListener("click", async () => {
+    const name = document.getElementById("customer_name").value;
+    const phone = document.getElementById("customer_phone").value;
+    const address = document.getElementById("customer_address").value;
+    const note = document.getElementById("customer_note").value;
+    const delivery = document.querySelector("input[name='delivery']:checked").value;
+
+    if (!name || !phone || !address) {
+      alert("অনুগ্রহ করে সব তথ্য পূরণ করুন");
+      return;
+    }
+
+    const payload = {
+      name, phone, address, note,
+      variant_id: variantId,
+      delivery_charge: delivery
+    };
+
+    const res = await fetch("https://shopify-order-form.vercel.app/api/create-order", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(payload)
+    });
+
+    const data = await res.json();
+    if (data.order) {
+      alert("অর্ডার সম্পন্ন হয়েছে!");
+    } else {
+      alert("অর্ডার করতে সমস্যা হয়েছে!");
+    }
+  });
+</script>
