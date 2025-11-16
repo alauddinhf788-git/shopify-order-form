@@ -1,15 +1,29 @@
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({ error: "Only POST allowed" });
   }
 
-  const { name, phone, address, note, delivery_charge } = req.body;
-
   try {
+    const {
+      name,
+      phone,
+      address,
+      note,
+      variant_id,
+      delivery_charge,
+      product_price
+    } = req.body;
+
+    const total_price = Number(product_price) + Number(delivery_charge);
+
     const orderData = {
       order: {
-        email: "noemail@placeholder.com",
-        phone: phone,
+        line_items: [
+          {
+            variant_id: Number(variant_id),
+            quantity: 1
+          }
+        ],
         billing_address: {
           name: name,
           phone: phone,
@@ -20,25 +34,11 @@ export default async function handler(req, res) {
           phone: phone,
           address1: address
         },
-        note: note,
-        tags: "COD, Custom Order",
-        
+        note: `Customer Note: ${note}`,
+        tags: "COD Order, Landing Page",
         financial_status: "pending",
-
-        line_items: [
-          {
-            title: "Sunglass Order",
-            price: "750",
-            quantity: 1
-          }
-        ],
-
-        shipping_lines: [
-          {
-            title: "Delivery Charge",
-            price: delivery_charge
-          }
-        ]
+        currency: "BDT",
+        total_price: total_price
       }
     };
 
@@ -56,17 +56,19 @@ export default async function handler(req, res) {
 
     const data = await response.json();
 
-    if (data.errors) {
+    if (!response.ok) {
       console.log("Shopify Error:", data);
       return res.status(500).json({ error: data });
     }
 
     return res.status(200).json({
-      message: "অর্ডার সফলভাবে কনফার্ম হয়েছে!",
-      order: data.order
+      success: true,
+      message: "Order Created Successfully",
+      order_id: data.order.id
     });
 
-  } catch (error) {
-    return res.status(500).json({ error: error.toString() });
+  } catch (err) {
+    console.error("Server Error:", err);
+    return res.status(500).json({ error: "Something went wrong" });
   }
 }
