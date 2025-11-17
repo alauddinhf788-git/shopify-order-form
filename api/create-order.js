@@ -41,16 +41,16 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Phone Validation (must be 11+ digits)
+    // 📌 Phone Validation (11+ digits)
     const digits = String(phone).replace(/\D/g, "");
     if (digits.length < 11) {
       return res.status(400).json({ error: "Phone number must be at least 11 digits" });
     }
 
-    // Keep original phone
+    // 🚫 STOP phone normalization → keep exactly what customer entered
     const rawPhone = phone;
 
-    // Fetch Variant Info
+    // ---------- Fetch Product Variant ----------
     const variantRes = await shopifyFetch(`/admin/api/2025-01/variants/${variant_id}.json`, { method: "GET" });
 
     if (!variantRes.ok) {
@@ -62,7 +62,7 @@ export default async function handler(req, res) {
     const productPrice = Number(variant.price || 0);
     const totalPrice = productPrice + Number(delivery_charge || 0);
 
-    // NOTE Formatting
+    // ---------- BEAUTIFUL NOTE ----------
     const fullNote =
       `নাম: ${name}\n` +
       `ফোন: ${rawPhone}\n` +
@@ -73,20 +73,12 @@ export default async function handler(req, res) {
       `ডেলিভারি চার্জ: ${delivery_charge}৳\n` +
       `মোট: ${totalPrice}৳`;
 
-    // ----------------------------
-    // ✅ ORDER WITH CUSTOMER OBJECT
-    // ----------------------------
+    // ---------- Create Order WITHOUT Customer Object ----------
+    // 🚫 No customer create → No fake email → No +880 auto format
     const orderPayload = {
       order: {
         note: fullNote,
         tags: `LandingPage, Delivery-${delivery_charge}`,
-
-        // 🔥 THIS PART MAKES SHOPIFY SHOW CUSTOMER
-        customer: {
-          first_name: name,
-          phone: rawPhone,
-          email: `${digits}@noemail.com`  // fake email okay
-        },
 
         line_items: [
           {
