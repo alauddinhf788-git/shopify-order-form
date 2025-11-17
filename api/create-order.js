@@ -27,7 +27,7 @@ export default async function handler(req, res) {
   // CORS
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
-    res.setHeader("Access-Control-Allow-Methods", "POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   }
   if (req.method === "OPTIONS") return res.status(200).end();
@@ -36,108 +36,47 @@ export default async function handler(req, res) {
   try {
     const { name, phone, address, note, delivery_charge, variant_id } = req.body || {};
 
-    // Required Fields Check
+    // Required fields
     if (!name || !phone || !address || !note || !variant_id) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // ---------- Normalize Bangladeshi Phone ----------
-    let digits = String(phone).replace(/\D/g, "");
-    let fixedPhone = phone;
-
-    if (digits.length === 11 && digits.startsWith("01")) {
-      fixedPhone = "+88" + digits;
-    } else if (digits.length === 13 && digits.startsWith("880")) {
-      fixedPhone = "+" + digits;
-    } else if (digits.length === 10 && digits.startsWith("1")) {
-      fixedPhone = "+880" + digits;
-    } else if (digits.length > 0) {
-      fixedPhone = "+" + digits;
+    // 📌 Phone Validation (11+ digits)
+    const digits = String(phone).replace(/\D/g, "");
+    if (digits.length < 11) {
+      return res.status(400).json({ error: "Phone number must be at least 11 digits" });
     }
 
-    // ---------- Fetch Product Variant Info ----------
+    // 🚫 STOP phone normalization → keep exactly what customer entered
+    const rawPhone = phone;
+
+    // ---------- Fetch Product Variant ----------
     const variantRes = await shopifyFetch(`/admin/api/2025-01/variants/${variant_id}.json`, { method: "GET" });
 
     if (!variantRes.ok) {
-      return res.status(500).json({
-        error: "Failed to fetch variant info",
-        details: variantRes.json
-      });
+      return res.status(500).json({ error: "Failed to fetch variant info", details: variantRes.json });
     }
 
     const variant = variantRes.json.variant;
-    const productName = variant.title || "Unnamed Product";
+    const productName = variant.title || "Product";
     const productPrice = Number(variant.price || 0);
     const totalPrice = productPrice + Number(delivery_charge || 0);
 
-    // ---------- Shopify Order Note (Beautiful Format) ----------
+    // ---------- BEAUTIFUL NOTE ----------
     const fullNote =
-  `নাম: ${name}\n` +
-  `ফোন: ${phone}\n` +
-  `ঠিকানা: ${address}\n` +
-  `কাস্টমার নোট: ${note}\n` +
-  `প্রোডাক্ট: ${productName}\n` +
-  `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
-  `ডেলিভারি চার্জ: ${delivery_charge}৳\n` +
-  `মোট: ${totalPrice}৳`;
+      `নাম: ${name}\n` +
+      `ফোন: ${rawPhone}\n` +
+      `ঠিকানা: ${address}\n` +
+      `কাস্টমার নোট: ${note}\n` +
+      `প্রোডাক্ট: ${productName}\n` +
+      `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
+      `ডেলিভারি চার্জ: ${delivery_charge}৳\n` +
+      `মোট: ${totalPrice}৳`;
 
-    // ---------- Customer Search ----------
-    let customerId = null;
-    const fallbackEmail = `${digits}@noemail.com`;
-
-    const searchQueries = [
-      `phone:${fixedPhone}`,
-      `phone:${digits}`,
-      `email:${fallbackEmail}`
-    ];
-
-    for (let q of searchQueries) {
-      const s = await shopifyFetch(
-        `/admin/api/2025-01/customers/search.json?query=${encodeURIComponent(q)}`,
-        { method: "GET" }
-      );
-      if (s.ok && s.json.customers?.length) {
-        customerId = s.json.customers[0].id;
-        break;
-      }
-    }
-
-    // ---------- Create Customer If Not Exists ----------
-    if (!customerId) {
-      const newCustomer = {
-        customer: {
-          first_name: name,
-          email: fallbackEmail,
-          phone: fixedPhone,
-          addresses: [
-            {
-              first_name: name,
-              address1: address,
-              phone: fixedPhone,
-              country: "Bangladesh"
-            }
-          ]
-        }
-      };
-
-      const createRes = await shopifyFetch(`/admin/api/2025-01/customers.json`, {
-        method: "POST",
-        body: JSON.stringify(newCustomer)
-      });
-
-      if (!createRes.ok) {
-        return res.status(500).json({ error: "Customer create failed", details: createRes.json });
-      }
-
-      customerId = createRes.json.customer.id;
-    }
-
-    // ---------- Create Order ----------
+    // ---------- Create Order WITHOUT Customer Object ----------
+    // 🚫 No customer create → No fake email → No +880 auto format
     const orderPayload = {
       order: {
-        customer_id: customerId,
-        email: fallbackEmail,
-        phone: fixedPhone,
         note: fullNote,
         tags: `LandingPage, Delivery-${delivery_charge}`,
 
@@ -150,15 +89,15 @@ export default async function handler(req, res) {
 
         shipping_address: {
           first_name: name,
+          phone: rawPhone,
           address1: address,
-          phone: fixedPhone,
           country: "Bangladesh"
         },
 
         billing_address: {
           first_name: name,
+          phone: rawPhone,
           address1: address,
-          phone: fixedPhone,
           country: "Bangladesh"
         },
 
@@ -174,6 +113,7 @@ export default async function handler(req, res) {
       }
     };
 
+    // Create order
     const orderRes = await shopifyFetch(`/admin/api/2025-01/orders.json`, {
       method: "POST",
       body: JSON.stringify(orderPayload)
@@ -183,10 +123,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Order create failed", details: orderRes.json });
     }
 
-    return res.status(200).json({
-      success: true,
-      order: orderRes.json.order
-    });
+    return res.status(200).json({ success: true, order: orderRes.json.order });
 
   } catch (err) {
     return res.status(500).json({ error: "Server Error", details: String(err) });
