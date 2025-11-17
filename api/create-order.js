@@ -14,33 +14,17 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // ============================
-  // 🔥 MAIN ORDER CREATION
-  // ============================
-
   try {
     const { name, phone, address, note, delivery_charge, variant_id } = req.body;
 
-    // ---------------------------------------------------
     // ⭐ FIX PHONE NUMBER FOR SHOPIFY
-    // ---------------------------------------------------
-    let fixedPhone = phone.trim();
-
-    // Remove spaces and dashes
-    fixedPhone = fixedPhone.replace(/[^0-9]/g, "");
-
-    // Convert to +8801XXXXXXXXX
-    if (fixedPhone.startsWith("0")) {
-      fixedPhone = "+88" + fixedPhone;
-    } else if (fixedPhone.startsWith("1")) {
-      fixedPhone = "+880" + fixedPhone;
-    }
+    let fixedPhone = phone.trim().replace(/[^0-9]/g, "");
+    if (fixedPhone.startsWith("0")) fixedPhone = "+88" + fixedPhone;
+    else if (fixedPhone.startsWith("1")) fixedPhone = "+880" + fixedPhone;
 
     console.log("📞 Final Shopify Phone:", fixedPhone);
 
-    // -----------------------------
-    // FORMAT NOTE
-    // -----------------------------
+    // ⭐ FORMAT NOTE
     const fullNote = `
 নাম: ${name}
 ফোন: ${phone}
@@ -49,22 +33,17 @@ export default async function handler(req, res) {
 ডেলিভারি চার্জ: ${delivery_charge}৳
     `;
 
+    // ⭐ PERFECT UPDATED PAYLOAD
     const orderPayload = {
       order: {
         email: `${phone}@noemail.com`,
         phone: fixedPhone,
 
-        customer: {
-          first_name: name,
-          phone: fixedPhone,
-          addresses: [
-            {
-              address1: address,
-              phone: fixedPhone,
-              first_name: name
-            }
-          ]
-        },
+        // ⭐ THIS CREATES FULL CUSTOMER AUTOMATICALLY
+        customer_creation: true,
+        customer_first_name: name,
+        customer_phone: fixedPhone,
+        customer_email: `${phone}@noemail.com`,
 
         line_items: [
           {
@@ -73,16 +52,18 @@ export default async function handler(req, res) {
           }
         ],
 
-        billing_address: {
-          first_name: name,
-          phone: fixedPhone,
-          address1: address
-        },
-
         shipping_address: {
           first_name: name,
           phone: fixedPhone,
-          address1: address
+          address1: address,
+          country: "Bangladesh"
+        },
+
+        billing_address: {
+          first_name: name,
+          phone: fixedPhone,
+          address1: address,
+          country: "Bangladesh"
         },
 
         note: fullNote.trim(),
@@ -101,9 +82,7 @@ export default async function handler(req, res) {
       }
     };
 
-    // ---------------------------------------------------
     // 🔥 CALL SHOPIFY API
-    // ---------------------------------------------------
     const response = await fetch(
       `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01/orders.json`,
       {
