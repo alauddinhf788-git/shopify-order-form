@@ -13,7 +13,10 @@ export default async function handler(req, res) {
   try {
     const { name, phone, address, note, delivery_charge, variant_id } = req.body;
 
-    // ⭐ Combined Note for Shopify Order
+    // Format delivery charge properly
+    const chargeFormatted = `${Number(delivery_charge).toFixed(2)}`;
+
+    // Combine for Shopify Note
     const fullNote = `
 নাম: ${name}
 ফোন: ${phone}
@@ -25,7 +28,7 @@ export default async function handler(req, res) {
     // FINAL ORDER PAYLOAD
     const orderPayload = {
       order: {
-        email: `${phone}@noemail.com`, // Dummy email (required field)
+        email: `${phone}@noemail.com`,
         phone: phone,
 
         customer: {
@@ -68,7 +71,7 @@ export default async function handler(req, res) {
         shipping_lines: [
           {
             title: "Delivery Charge",
-            price: String(delivery_charge),
+            price: chargeFormatted,
             code: "CUSTOM_DELIVERY"
           }
         ]
