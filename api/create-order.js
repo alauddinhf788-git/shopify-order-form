@@ -7,7 +7,8 @@ export default async function handler(req, res) {
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
-    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    res.setHeader("Access-Control-Allow-Credentials", "true");
   }
 
   if (req.method === "OPTIONS") {
@@ -17,33 +18,31 @@ export default async function handler(req, res) {
   try {
     const { name, phone, address, note, delivery_charge, variant_id } = req.body;
 
-    // ⭐ FIX PHONE NUMBER FOR SHOPIFY
+    // -----------------------------
+    // ⭐ FIX PHONE FOR SHOPIFY
+    // -----------------------------
     let fixedPhone = phone.trim().replace(/[^0-9]/g, "");
     if (fixedPhone.startsWith("0")) fixedPhone = "+88" + fixedPhone;
     else if (fixedPhone.startsWith("1")) fixedPhone = "+880" + fixedPhone;
 
-    console.log("📞 Final Shopify Phone:", fixedPhone);
-
+    // -----------------------------
     // ⭐ FORMAT NOTE
+    // -----------------------------
     const fullNote = `
 নাম: ${name}
 ফোন: ${phone}
 ঠিকানা: ${address}
-কাস্টমার নোট: ${note}
+অর্ডার নোট: ${note}
 ডেলিভারি চার্জ: ${delivery_charge}৳
-    `;
+    `.trim();
 
-    // ⭐ PERFECT UPDATED PAYLOAD
+    // -----------------------------
+    // ⭐ FINAL SHOPIFY ORDER PAYLOAD
+    // -----------------------------
     const orderPayload = {
       order: {
         email: `${phone}@noemail.com`,
         phone: fixedPhone,
-
-        // ⭐ THIS CREATES FULL CUSTOMER AUTOMATICALLY
-        customer_creation: true,
-        customer_first_name: name,
-        customer_phone: fixedPhone,
-        customer_email: `${phone}@noemail.com`,
 
         line_items: [
           {
@@ -53,36 +52,38 @@ export default async function handler(req, res) {
         ],
 
         shipping_address: {
-          first_name: name,
+          name: name,
           phone: fixedPhone,
           address1: address,
-          country: "Bangladesh"
+          country: "BD"
         },
 
         billing_address: {
-          first_name: name,
+          name: name,
           phone: fixedPhone,
           address1: address,
-          country: "Bangladesh"
+          country: "BD"
         },
 
-        note: fullNote.trim(),
+        note: fullNote,
 
         tags: `LandingPage, Delivery-${delivery_charge}`,
-
-        financial_status: "pending",
 
         shipping_lines: [
           {
             title: "Delivery Charge",
-            price: `${Number(delivery_charge).toFixed(2)}`,
+            price: Number(delivery_charge),
             code: "CUSTOM_DELIVERY"
           }
-        ]
+        ],
+
+        financial_status: "pending"
       }
     };
 
-    // 🔥 CALL SHOPIFY API
+    // -----------------------------
+    // 🔥 SEND TO SHOPIFY
+    // -----------------------------
     const response = await fetch(
       `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01/orders.json`,
       {
@@ -98,7 +99,7 @@ export default async function handler(req, res) {
     const data = await response.json();
 
     if (!response.ok) {
-      console.log("❌ Shopify API Error:", data);
+      console.log("❌ Shopify Error:", data);
       return res.status(500).json({ error: data });
     }
 
