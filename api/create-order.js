@@ -1,14 +1,20 @@
+const allowedOrigins = process.env.ALLOWED_ORIGIN.split(",");
+
 export default async function handler(req, res) {
-  // CORS SETTINGS
-  res.setHeader("Access-Control-Allow-Origin", process.env.ALLOWED_ORIGIN);
-  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  const origin = req.headers.origin;
 
-  if (req.method === "OPTIONS") return res.status(200).end();
-
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Only POST allowed" });
+  if (allowedOrigins.includes(origin)) {
+    res.setHeader("Access-Control-Allow-Origin", origin);
+    res.setHeader("Access-Control-Allow-Methods", "GET,POST,OPTIONS");
+    res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   }
+
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  // আপনার নিচের Shopify order create কোড এখানে যাবে...
+}
 
   try {
     const { name, phone, address, note, delivery_charge, variant_id } = req.body;
