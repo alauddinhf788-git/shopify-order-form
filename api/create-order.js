@@ -1,3 +1,4 @@
+// ------------ CORS SETUP (TOP) ---------------
 const allowedOrigins = process.env.ALLOWED_ORIGIN.split(",");
 
 export default async function handler(req, res) {
@@ -13,16 +14,12 @@ export default async function handler(req, res) {
     return res.status(200).end();
   }
 
-  // আপনার নিচের Shopify order create কোড এখানে যাবে...
-}
-
+  // ----------- START TRY BLOCK (Inside Handler) ----------
   try {
     const { name, phone, address, note, delivery_charge, variant_id } = req.body;
 
-    // Format delivery charge properly
     const chargeFormatted = `${Number(delivery_charge).toFixed(2)}`;
 
-    // Combine for Shopify Note
     const fullNote = `
 নাম: ${name}
 ফোন: ${phone}
@@ -31,7 +28,6 @@ export default async function handler(req, res) {
 ডেলিভারি চার্জ: ${delivery_charge}৳
     `;
 
-    // FINAL ORDER PAYLOAD
     const orderPayload = {
       order: {
         email: `${phone}@noemail.com`,
@@ -69,9 +65,7 @@ export default async function handler(req, res) {
         },
 
         note: fullNote.trim(),
-
         tags: `LandingPage, Delivery-${delivery_charge}`,
-
         financial_status: "pending",
 
         shipping_lines: [
@@ -84,7 +78,6 @@ export default async function handler(req, res) {
       }
     };
 
-    // CALL SHOPIFY API
     const response = await fetch(
       `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01/orders.json`,
       {
