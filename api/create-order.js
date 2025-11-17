@@ -72,14 +72,14 @@ export default async function handler(req, res) {
 
     // ---------- Shopify Order Note (Beautiful Format) ----------
     const fullNote =
-      `নাম: ${name}\n` +
-      `ফোন: ${phone}\n` +
-      `ঠিকানা: ${address}\n` +
-      `কাস্টমার নোট: ${note}\n` +
-      `প্রোডাক্ট: ${productName}\n` +
-      `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
-      `ডেলিভারি চার্জ: ${delivery_charge}৳\n` +
-      `মোট: ${totalPrice}৳`;
+  `নাম: ${name}<br>` +
+  `ফোন: ${phone}<br>` +
+  `ঠিকানা: ${address}<br>` +
+  `কাস্টমার নোট: ${note}<br>` +
+  `প্রোডাক্ট: ${productName}<br>` +
+  `প্রোডাক্ট মূল্য: ${productPrice}৳<br>` +
+  `ডেলিভারি চার্জ: ${delivery_charge}৳<br>` +
+  `মোট: ${totalPrice}৳`;
 
     // ---------- Customer Search ----------
     let customerId = null;
