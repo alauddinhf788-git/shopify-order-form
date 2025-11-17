@@ -4,31 +4,40 @@ export default async function handler(req, res) {
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
   res.setHeader("Access-Control-Allow-Headers", "Content-Type");
 
-  if (req.method === "OPTIONS") {
-    return res.status(200).end();
-  }
+  if (req.method === "OPTIONS") return res.status(200).end();
 
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST allowed" });
   }
 
   try {
-    const {
-      name,
-      phone,
-      address,
-      note,
-      delivery_charge,
-      variant_id
-    } = req.body;
+    const { name, phone, address, note, delivery_charge, variant_id } = req.body;
 
-    // ORDER PAYLOAD
+    // ⭐ Combined Note for Shopify Order
+    const fullNote = `
+নাম: ${name}
+ফোন: ${phone}
+ঠিকানা: ${address}
+কাস্টমার নোট: ${note}
+ডেলিভারি চার্জ: ${delivery_charge}৳
+    `;
+
+    // FINAL ORDER PAYLOAD
     const orderPayload = {
       order: {
+        email: `${phone}@noemail.com`, // Dummy email (required field)
+        phone: phone,
+
         customer: {
           first_name: name,
           phone: phone,
-          address: address,
+          addresses: [
+            {
+              address1: address,
+              phone: phone,
+              first_name: name
+            }
+          ]
         },
 
         line_items: [
@@ -50,20 +59,23 @@ export default async function handler(req, res) {
           address1: address
         },
 
-        note: note,
+        note: fullNote.trim(),
+
         tags: `LandingPage, Delivery-${delivery_charge}`,
+
         financial_status: "pending",
 
         shipping_lines: [
           {
             title: "Delivery Charge",
-            price: String(delivery_charge)
+            price: String(delivery_charge),
+            code: "CUSTOM_DELIVERY"
           }
         ]
       }
     };
 
-    // SHOPIFY API CALL
+    // CALL SHOPIFY API
     const response = await fetch(
       `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01/orders.json`,
       {
@@ -85,7 +97,8 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       success: true,
-      order: data
+      order: data.order,
+      order_id: data.order.id
     });
 
   } catch (err) {
