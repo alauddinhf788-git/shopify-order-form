@@ -76,43 +76,46 @@ export default async function handler(req, res) {
 
     // Order Payload WITHOUT source_name
     const orderPayload = {
-      order: {
-        tags: `LandingPage, AutoSync-SF, Delivery-${delivery_charge}`,
+  order: {
 
-        note: fullNote,
+    source_identifier: "landing-page",   // ⭐ Shopify নিজে source_name="web" করবে
 
-        line_items: [
-          {
-            variant_id: Number(variant_id),
-            quantity: 1
-          }
-        ],
+    tags: `LandingPage, AutoSync-SF, Delivery-${delivery_charge}`,
 
-        shipping_address: {
-          first_name: name,
-          phone: rawPhone,
-          address1: address,
-          country: "Bangladesh"
-        },
+    note: fullNote,
 
-        billing_address: {
-          first_name: name,
-          phone: rawPhone,
-          address1: address,
-          country: "Bangladesh"
-        },
-
-        shipping_lines: [
-          {
-            title: "Delivery Charge",
-            price: Number(delivery_charge).toFixed(2),
-            code: "CUSTOM_DELIVERY"
-          }
-        ],
-
-        financial_status: "pending"
+    line_items: [
+      {
+        variant_id: Number(variant_id),
+        quantity: 1
       }
-    };
+    ],
+
+    shipping_address: {
+      first_name: name,
+      phone: rawPhone,
+      address1: address,
+      country: "Bangladesh"
+    },
+
+    billing_address: {
+      first_name: name,
+      phone: rawPhone,
+      address1: address,
+      country: "Bangladesh"
+    },
+
+    shipping_lines: [
+      {
+        title: "Delivery Charge",
+        price: Number(delivery_charge).toFixed(2),
+        code: "CUSTOM_DELIVERY"
+      }
+    ],
+
+    financial_status: "pending"
+  }
+};
 
     // Create order
     const orderRes = await shopifyFetch(`/admin/api/2025-01/orders.json`, {
