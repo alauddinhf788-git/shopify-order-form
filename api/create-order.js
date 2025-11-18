@@ -41,16 +41,15 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // 📌 Phone Validation (11+ digits)
+    // Phone Validation (11+ digits)
     const digits = String(phone).replace(/\D/g, "");
     if (digits.length < 11) {
       return res.status(400).json({ error: "Phone number must be at least 11 digits" });
     }
 
-    // 🚫 STOP phone normalization → keep exactly what customer entered
     const rawPhone = phone;
 
-    // ---------- Fetch Product Variant ----------
+    // Fetch Variant Info
     const variantRes = await shopifyFetch(`/admin/api/2025-01/variants/${variant_id}.json`, { method: "GET" });
 
     if (!variantRes.ok) {
@@ -62,8 +61,9 @@ export default async function handler(req, res) {
     const productPrice = Number(variant.price || 0);
     const totalPrice = productPrice + Number(delivery_charge || 0);
 
-    // ---------- BEAUTIFUL NOTE ----------
+    // Clean + SteadFast Friendly NOTE format
     const fullNote =
+      `🔥 Landing Page Order\n` +
       `নাম: ${name}\n` +
       `ফোন: ${rawPhone}\n` +
       `ঠিকানা: ${address}\n` +
@@ -71,16 +71,15 @@ export default async function handler(req, res) {
       `প্রোডাক্ট: ${productName}\n` +
       `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
       `ডেলিভারি চার্জ: ${delivery_charge}৳\n` +
-      `মোট: ${totalPrice}৳`;
+      `মোট: ${totalPrice}৳\n` +
+      `Source: Web-Landing`;
 
-    // ---------- Create Order WITHOUT Customer Object ----------
-    // 🚫 No customer create → No fake email → No +880 auto format
+    // Order Payload WITHOUT source_name
     const orderPayload = {
       order: {
-        source_name: "web",
-        
+        tags: `LandingPage, AutoSync-SF, Delivery-${delivery_charge}`,
+
         note: fullNote,
-        tags: `LandingPage, Delivery-${delivery_charge}`,
 
         line_items: [
           {
