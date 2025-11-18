@@ -77,6 +77,8 @@ export default async function handler(req, res) {
     // 🚫 No customer create → No fake email → No +880 auto format
     const orderPayload = {
       order: {
+        source_name: "web",
+        
         note: fullNote,
         tags: `LandingPage, Delivery-${delivery_charge}`,
 
