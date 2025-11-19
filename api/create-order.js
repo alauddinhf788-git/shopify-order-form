@@ -72,27 +72,32 @@ export default async function handler(req, res) {
 
     // Payload for Shopify only (No courier send)
     const orderPayload = {
-      order: {
-        note: fullNote,
-        source_identifier: "landing-page",
-        tags: `LandingPage, AutoSync-Manual, Delivery-${delivery_charge}`,
-        financial_status: "pending",
-        line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
-        shipping_lines: [{ title: "Delivery Charge", price: Number(delivery_charge).toFixed(2) }],
-        shipping_address: {
-          first_name: name,
-          phone: rawPhone,
-          address1: address,
-          country: "Bangladesh"
-        },
-        billing_address: {
-          first_name: name,
-          phone: rawPhone,
-          address1: address,
-          country: "Bangladesh"
-        }
-      }
-    };
+  order: {
+    note: fullNote,
+    source_name: "web",
+    send_receipt: true,
+    send_fulfillment_receipt: false,
+    tags: `LandingPage, ManualApproval`,
+    financial_status: "pending",
+    fulfillment_status: null,
+    line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
+    shipping_lines: [
+      { title: "Delivery Charge", price: Number(delivery_charge).toFixed(2) }
+    ],
+    shipping_address: {
+      first_name: name,
+      phone: rawPhone,
+      address1: address,
+      country: "Bangladesh"
+    },
+    billing_address: {
+      first_name: name,
+      phone: rawPhone,
+      address1: address,
+      country: "Bangladesh"
+    }
+  }
+};
 
     // Create Shopify order
     const orderRes = await shopifyFetch(`/admin/api/2025-01/orders.json`, {
