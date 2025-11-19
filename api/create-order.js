@@ -77,16 +77,6 @@ export default async function handler(req, res) {
         source_identifier: "landing-page",
         tags: `LandingPage, AutoSync-Manual, Delivery-${delivery_charge}`,
         financial_status: "pending",
-
-        customer: {
-  first_name: firstName,
-  last_name: lastName,
-  phone: rawPhone,
-  email: `${rawPhone}@temp.com`,
-  verified_email: false
-},
-
-
         line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
         shipping_lines: [{ title: "Delivery Charge", price: Number(delivery_charge).toFixed(2) }],
         shipping_address: {
