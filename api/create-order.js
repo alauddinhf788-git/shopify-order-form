@@ -139,7 +139,9 @@ export default async function handler(req, res) {
 
     const order = orderRes.json.order;
 
-    // ▶ 2) সাথে সাথেই SteadFast-এ Push
+    // ▶ 2) SteadFast-এ Push + ডিবাগ তথ্য রাখা
+    let sfDebug = null;
+
     try {
       const deliveryArea =
         Number(delivery_charge) === 60 ? "Dhaka" : "Outside Dhaka";
@@ -149,7 +151,7 @@ export default async function handler(req, res) {
         recipient_name: name,
         recipient_phone: rawPhone,
         recipient_address: address,
-        cod_amount: Number(order.total_price), // Shopify total
+        cod_amount: Number(order.total_price),
         note: fullNote,
         product_details: `${productName} x1`,
         delivery_area: deliveryArea,
@@ -166,15 +168,22 @@ export default async function handler(req, res) {
         body: JSON.stringify(sfPayload),
       });
 
-      const sfRes = await sfResRaw.json().catch(() => null);
-      console.log("✅ SteadFast Response from create-order:", sfRes);
+      const sfText = await sfResRaw.text(); // raw text নি, JSON না হলেও দেখব
+      sfDebug = {
+        status: sfResRaw.status,
+        body: sfText,
+        sentPayload: sfPayload,
+      };
+
+      console.log("✅ SteadFast HTTP status:", sfResRaw.status);
+      console.log("✅ SteadFast raw response:", sfText);
     } catch (e) {
-      // SteadFast এ না গেলেও কাস্টমারের অর্ডার নষ্ট করব না
       console.error("❌ SteadFast push failed:", e);
+      sfDebug = { error: String(e) };
     }
 
-    // ▶ 3) ক্লায়েন্টকে Shopify order রিটার্ন
-    return res.status(200).json({ success: true, order });
+    // ▶ 3) ক্লায়েন্টকে Shopify order + SteadFast ডিবাগ পাঠাই
+    return res.status(200).json({ success: true, order, steadfast: sfDebug });
   } catch (err) {
     console.error("Server error:", err);
     return res
