@@ -3,7 +3,7 @@
 // CORS Allowed Domains
 const allowedOrigins = (process.env.ALLOWED_ORIGIN || "")
   .split(",")
-  .map(s => s.trim())
+  .map((s) => s.trim())
   .filter(Boolean);
 
 // Shopify API Helper
@@ -12,7 +12,7 @@ async function shopifyFetch(path, opts = {}) {
   const headers = {
     "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API_ACCESS_TOKEN,
     "Content-Type": "application/json",
-    ...(opts.headers || {})
+    ...(opts.headers || {}),
   };
 
   const res = await fetch(url, { ...opts, headers });
@@ -31,10 +31,12 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   }
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Only POST allowed" });
 
   try {
-    const { name, phone, address, note, delivery_charge, variant_id } = req.body || {};
+    const { name, phone, address, note, delivery_charge, variant_id } =
+      req.body || {};
 
     // Required fields
     if (!name || !phone || !address || !note || !variant_id) {
@@ -44,16 +46,24 @@ export default async function handler(req, res) {
     // Phone Validation (11+ digits)
     const digits = String(phone).replace(/\D/g, "");
     if (digits.length < 11) {
-      return res.status(400).json({ error: "Phone number must be at least 11 digits" });
+      return res
+        .status(400)
+        .json({ error: "Phone number must be at least 11 digits" });
     }
 
     const rawPhone = phone;
 
     // Fetch Variant Info
-    const variantRes = await shopifyFetch(`/admin/api/2025-01/variants/${variant_id}.json`, { method: "GET" });
+    const variantRes = await shopifyFetch(
+      `/admin/api/2025-01/variants/${variant_id}.json`,
+      { method: "GET" }
+    );
 
     if (!variantRes.ok) {
-      return res.status(500).json({ error: "Failed to fetch variant info", details: variantRes.json });
+      return res.status(500).json({
+        error: "Failed to fetch variant info",
+        details: variantRes.json,
+      });
     }
 
     const variant = variantRes.json.variant;
@@ -61,7 +71,7 @@ export default async function handler(req, res) {
     const productPrice = Number(variant.price || 0);
     const totalPrice = productPrice + Number(delivery_charge || 0);
 
-    // Clean + SteadFast Friendly NOTE format
+    // NOTE text
     const fullNote =
       `🔥 Landing Page Order\n` +
       `নাম: ${name}\n` +
@@ -74,62 +84,101 @@ export default async function handler(req, res) {
       `মোট: ${totalPrice}৳\n` +
       `Source: Web-Landing`;
 
-    // Order Payload WITHOUT source_name
+    // Shopify Order Payload
     const orderPayload = {
-  order: {
+      order: {
+        source_identifier: "landing-page",
+        tags: `LandingPage, AutoSync-SF, Delivery-${delivery_charge}`,
+        note: fullNote,
 
-    source_identifier: "landing-page",   // ⭐ Shopify নিজে source_name="web" করবে
+        line_items: [
+          {
+            variant_id: Number(variant_id),
+            quantity: 1,
+          },
+        ],
 
-    tags: `LandingPage, AutoSync-SF, Delivery-${delivery_charge}`,
+        shipping_address: {
+          first_name: name,
+          phone: rawPhone,
+          address1: address,
+          country: "Bangladesh",
+        },
 
-    note: fullNote,
+        billing_address: {
+          first_name: name,
+          phone: rawPhone,
+          address1: address,
+          country: "Bangladesh",
+        },
 
-    line_items: [
-      {
-        variant_id: Number(variant_id),
-        quantity: 1
-      }
-    ],
+        shipping_lines: [
+          {
+            title: "Delivery Charge",
+            price: Number(delivery_charge).toFixed(2),
+            code: "CUSTOM_DELIVERY",
+          },
+        ],
 
-    shipping_address: {
-      first_name: name,
-      phone: rawPhone,
-      address1: address,
-      country: "Bangladesh"
-    },
+        financial_status: "pending",
+      },
+    };
 
-    billing_address: {
-      first_name: name,
-      phone: rawPhone,
-      address1: address,
-      country: "Bangladesh"
-    },
-
-    shipping_lines: [
-      {
-        title: "Delivery Charge",
-        price: Number(delivery_charge).toFixed(2),
-        code: "CUSTOM_DELIVERY"
-      }
-    ],
-
-    financial_status: "pending"
-  }
-};
-
-    // Create order
+    // ▶ 1) Shopify Order Create
     const orderRes = await shopifyFetch(`/admin/api/2025-01/orders.json`, {
       method: "POST",
-      body: JSON.stringify(orderPayload)
+      body: JSON.stringify(orderPayload),
     });
 
     if (!orderRes.ok) {
-      return res.status(500).json({ error: "Order create failed", details: orderRes.json });
+      return res.status(500).json({
+        error: "Order create failed",
+        details: orderRes.json,
+      });
     }
 
-    return res.status(200).json({ success: true, order: orderRes.json.order });
+    const order = orderRes.json.order;
 
+    // ▶ 2) সাথে সাথেই SteadFast-এ Push
+    try {
+      const deliveryArea =
+        Number(delivery_charge) === 60 ? "Dhaka" : "Outside Dhaka";
+
+      const sfPayload = {
+        invoice: String(order.id),
+        recipient_name: name,
+        recipient_phone: rawPhone,
+        recipient_address: address,
+        cod_amount: Number(order.total_price), // Shopify total
+        note: fullNote,
+        product_details: `${productName} x1`,
+        delivery_area: deliveryArea,
+        pickup_address: "Default Pickup",
+      };
+
+      const sfResRaw = await fetch(process.env.STEADFAST_API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "api-key": process.env.STEADFAST_API_KEY,
+          "secret-key": process.env.STEADFAST_SECRET_KEY,
+        },
+        body: JSON.stringify(sfPayload),
+      });
+
+      const sfRes = await sfResRaw.json().catch(() => null);
+      console.log("✅ SteadFast Response from create-order:", sfRes);
+    } catch (e) {
+      // SteadFast এ না গেলেও কাস্টমারের অর্ডার নষ্ট করব না
+      console.error("❌ SteadFast push failed:", e);
+    }
+
+    // ▶ 3) ক্লায়েন্টকে Shopify order রিটার্ন
+    return res.status(200).json({ success: true, order });
   } catch (err) {
-    return res.status(500).json({ error: "Server Error", details: String(err) });
+    console.error("Server error:", err);
+    return res
+      .status(500)
+      .json({ error: "Server Error", details: String(err) });
   }
 }
