@@ -1,25 +1,20 @@
 // /api/create-order.js
 
+// CORS
 const allowedOrigins = (process.env.ALLOWED_ORIGIN || "")
   .split(",")
-  .map(s => s.trim())
+  .map((s) => s.trim())
   .filter(Boolean);
 
 async function shopifyFetch(path, opts = {}) {
-  const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}${path}`;
+  const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}/admin/api/2025-01${path}`;
   const headers = {
     "X-Shopify-Access-Token": process.env.SHOPIFY_ADMIN_API_ACCESS_TOKEN,
     "Content-Type": "application/json",
-    ...(opts.headers || {})
   };
 
   const res = await fetch(url, { ...opts, headers });
-  let json = null;
-
-  try {
-    json = await res.json();
-  } catch (e) {}
-
+  const json = await res.json().catch(() => null);
   return { ok: res.ok, status: res.status, json };
 }
 
@@ -33,8 +28,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
-    return res.status(405).json({ error: "Only POST allowed" });
+  if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
   try {
     const { name, phone, address, note, delivery_charge, variant_id } = req.body || {};
@@ -48,81 +42,49 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Phone number must be at least 11 digits" });
     }
 
-    const parts = name.trim().split(" ");
-    const firstName = parts[0] || name;
-    const lastName = parts.slice(1).join(" ") || "-";
-
-    const variantRes = await shopifyFetch(`/admin/api/2025-01/variants/${variant_id}.json`, { method: "GET" });
-
+    // get variant
+    const variantRes = await shopifyFetch(`/variants/${variant_id}.json`);
     if (!variantRes.ok) {
-      return res.status(500).json({ error: "Variant fetch failed", debug: variantRes });
+      return res.status(500).json({ error: "Variant fetch failed", details: variantRes.json });
     }
 
     const variant = variantRes.json.variant;
     const productName = variant.title;
-    const productPrice = Number(variant.price || 0);
+    const productPrice = Number(variant.price);
     const totalPrice = productPrice + Number(delivery_charge);
 
+    // Note content
     const fullNote =
-      `🔥 Landing Page Order\n` +
-      `নাম: ${name}\n` +
-      `ফোন: ${digits}\n` +
-      `ঠিকানা: ${address}\n` +
-      `কাস্টমার নোট: ${note}\n` +
-      `প্রোডাক্ট: ${productName}\n` +
-      `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
-      `ডেলিভারি চার্জ: ${delivery_charge}৳\n` +
-      `মোট: ${totalPrice}৳\n` +
-      `Source: Web-Landing`;
+      `🔥 Landing Page Order\nনাম: ${name}\nফোন: ${digits}\nঠিকানা: ${address}\nকাস্টমার নোট: ${note}\nপ্রোডাক্ট: ${productName}\nপ্রোডাক্ট মূল্য: ${productPrice}৳\nডেলিভারি চার্জ: ${delivery_charge}৳\nমোট: ${totalPrice}৳\nSource: Web-Landing`;
 
-    const orderPayload = {
-      order: {
-        note: fullNote,
-        tags: `LandingPage-${delivery_charge}`,
-        financial_status: "pending",
-        phone: digits,
-
-        line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
-
-        shipping_lines: [
-          {
-            title: "Delivery Charge",
-            price: Number(delivery_charge).toFixed(2),
-            code: "CUSTOM_DELIVERY"
-          }
-        ],
-
-        shipping_address: {
-          first_name: firstName,
-          last_name: lastName,
-          phone: digits,
-          address1: address,
-          country: "Bangladesh"
-        },
-
-        billing_address: {
-          first_name: firstName,
-          last_name: lastName,
-          phone: digits,
-          address1: address,
-          country: "Bangladesh"
-        },
-      }
-    };
-
-    const orderRes = await shopifyFetch(`/admin/api/2025-01/orders.json`, {
+    // Create Shopify Order
+    const orderRes = await shopifyFetch(`/orders.json`, {
       method: "POST",
-      body: JSON.stringify(orderPayload)
+      body: JSON.stringify({
+        order: {
+          note: fullNote,
+          financial_status: "pending",
+          phone: digits,
+          line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
+          shipping_lines: [{ title: "Delivery Charge", price: delivery_charge }],
+          shipping_address: {
+            first_name: name,
+            phone: digits,
+            address1: address,
+            country: "Bangladesh",
+          },
+        },
+      }),
     });
 
     if (!orderRes.ok) {
-      return res.status(500).json({ error: "Shopify order failure", debug: orderRes });
+      return res.status(500).json({ error: "Order failed", details: orderRes.json });
     }
 
     return res.status(200).json({ success: true, order: orderRes.json.order });
 
-  } catch (err) {
-    console.error("SERVER ERROR:", err);
-    return res.status(500).json({ error: "Server Crashed", details: String(err) });
+  } catch (e) {
+    console.error("SERVER ERROR", e);
+    return res.status(500).json({ error: "Server crashed" });
   }
 }
