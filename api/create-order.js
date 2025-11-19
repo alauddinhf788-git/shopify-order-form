@@ -31,8 +31,9 @@ export default async function handler(req, res) {
     res.setHeader("Access-Control-Allow-Headers", "Content-Type");
   }
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
+  if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST allowed" });
+  }
 
   try {
     const { name, phone, address, note, delivery_charge, variant_id } =
@@ -43,7 +44,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
-    // Phone Validation (11+ digits) – SteadFast ১১ ডিজিট চায়
+    // Phone Validation (11+ digits)
     const digits = String(phone).replace(/\D/g, "");
     if (digits.length < 11) {
       return res
@@ -52,7 +53,7 @@ export default async function handler(req, res) {
     }
     const rawPhone = digits;
 
-    // Fetch Variant Info from Shopify
+    // Variant info from Shopify
     const variantRes = await shopifyFetch(
       `/admin/api/2025-01/variants/${variant_id}.json`,
       { method: "GET" }
@@ -70,7 +71,7 @@ export default async function handler(req, res) {
     const productPrice = Number(variant.price || 0);
     const totalPrice = productPrice + Number(delivery_charge || 0);
 
-    // NOTE text (Shopify + SteadFast দুই জায়গাতেই ব্যবহার করব)
+    // NOTE text
     const fullNote =
       `🔥 Landing Page Order\n` +
       `নাম: ${name}\n` +
@@ -83,11 +84,12 @@ export default async function handler(req, res) {
       `মোট: ${totalPrice}৳\n` +
       `Source: Web-Landing`;
 
-    // ▶ 1) Shopify Order Payload
+    // 👉 শুধু Shopify Order Payload (SteadFast আর নেই এখানে)
     const orderPayload = {
       order: {
+        source_name: "web", // checkout এর মতই দেখাবে
         source_identifier: "landing-page",
-        tags: `LandingPage, AutoSync-SF, Delivery-${delivery_charge}`,
+        tags: `LandingPage, Needs-Approval`,
         note: fullNote,
 
         line_items: [
@@ -123,7 +125,7 @@ export default async function handler(req, res) {
       },
     };
 
-    // ▶ 2) Shopify Order Create
+    // Shopify Order Create
     const orderRes = await shopifyFetch(`/admin/api/2025-01/orders.json`, {
       method: "POST",
       body: JSON.stringify(orderPayload),
@@ -138,47 +140,8 @@ export default async function handler(req, res) {
 
     const order = orderRes.json.order;
 
-    // ▶ 3) SteadFast এ Push (official docs অনুযায়ী)
-
-    let sfDebug = null;
-    try {
-      const sfPayload = {
-        invoice: String(order.id),
-        recipient_name: name,
-        recipient_phone: rawPhone,
-        recipient_address: address,
-        cod_amount: Number(order.total_price),
-        note: fullNote,
-        item_description: `${productName} x1`,
-        total_lot: 1,
-        delivery_type: 0, // 0=Home Delivery
-      };
-
-      const sfResRaw = await fetch(process.env.STEADFAST_API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Api-Key": process.env.STEADFAST_API_KEY,
-          "Secret-Key": process.env.STEADFAST_SECRET_KEY,
-        },
-        body: JSON.stringify(sfPayload),
-      });
-
-      const sfText = await sfResRaw.text();
-      sfDebug = {
-        status: sfResRaw.status,
-        body: sfText,
-      };
-
-      console.log("✅ SteadFast HTTP status:", sfResRaw.status);
-      console.log("✅ SteadFast raw response:", sfText);
-    } catch (e) {
-      console.error("❌ SteadFast push failed:", e);
-      sfDebug = { error: String(e) };
-    }
-
-    // ▶ 4) ক্লায়েন্টকে Shopify order + SteadFast debug ফেরত
-    return res.status(200).json({ success: true, order, steadfast: sfDebug });
+    // ✔ এবার শুধু Shopify order রিটার্ন করব
+    return res.status(200).json({ success: true, order });
   } catch (err) {
     console.error("Server error:", err);
     return res
