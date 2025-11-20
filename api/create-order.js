@@ -88,8 +88,7 @@ export default async function handler(req, res) {
       order: {
         source_name: "web",
 source: "checkout",
-        source_identifier: "landing-page",
-        tags: `LandingPage, AutoSync-SF, Delivery-${delivery_charge}`,
+
         note: fullNote,
 
         line_items: [
