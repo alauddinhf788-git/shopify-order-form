@@ -86,8 +86,7 @@ export default async function handler(req, res) {
     // ▶ 1) Shopify Order Payload
     const orderPayload = {
       order: {
-        source_name: "web",
-source: "checkout",
+
         source_identifier: "landing-page",
         tags: `LandingPage, AutoSync-SF, Delivery-${delivery_charge}`,
 
