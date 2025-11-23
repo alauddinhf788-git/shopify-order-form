@@ -61,14 +61,13 @@ export default async function handler(req, res) {
     const fullNote =
       `🔥 Landing Page Order\n` +
       `নাম: ${name}\n` +
-      `ফোন: ${rawPhone}\n` +
       `ঠিকানা: ${address}\n` +
-      `কাস্টমার নোট: ${note}\n` +
+      `ফোন: ${rawPhone}\n` +
+      `মোট: ${totalPrice}৳\n` +
+      `প্রোডাক্টের কোড: ${note}\n` +
       `প্রোডাক্ট: ${productName}\n` +
       `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
-      `ডেলিভারি চার্জ: ${delivery_charge}৳\n` +
-      `মোট: ${totalPrice}৳\n` +
-      `Source: Web-Landing`;
+      `ডেলিভারি চার্জ: ${delivery_charge}৳\n`;
 
     // Payload for Shopify only (No courier send)
     const orderPayload = {
