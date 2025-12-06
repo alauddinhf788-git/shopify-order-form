@@ -1,12 +1,10 @@
 // /api/create-order.js
 
-// CORS Allowed Domains
 const allowedOrigins = (process.env.ALLOWED_ORIGIN || "")
   .split(",")
   .map((s) => s.trim())
   .filter(Boolean);
 
-// Shopify API Helper
 async function shopifyFetch(path, opts = {}) {
   const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}${path}`;
   const headers = {
@@ -21,7 +19,6 @@ async function shopifyFetch(path, opts = {}) {
   return { ok: res.ok, status: res.status, json };
 }
 
-// ✅ NEW: Client IP Helper (২৪ ঘন্টার ব্লকের জন্য)
 function getClientIp(req) {
   const xf = req.headers["x-forwarded-for"];
   if (Array.isArray(xf)) return xf[0];
@@ -32,7 +29,6 @@ function getClientIp(req) {
 export default async function handler(req, res) {
   const origin = req.headers.origin;
 
-  // CORS CHECK
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -42,23 +38,24 @@ export default async function handler(req, res) {
   if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
   try {
-    const { name, phone, address, note, delivery_charge, variant_id } = req.body || {};
+    const { name, phone, address, note, delivery_charge, variant_id, device_fp } = req.body || {};
 
-    if (!name || !phone || !address || !note || !variant_id) {
+    if (!name || !phone || !address || !note || !variant_id || !device_fp) {
       return res.status(400).json({ error: "Missing required fields" });
     }
 
     const rawPhone = phone.replace(/\D/g, "");
     if (rawPhone.length < 11) {
-      return res.status(400).json({ error: "Phone must be at least 11 digits" });
+      return res.status(400).json({ error: "Invalid phone" });
     }
 
-    // ✅ NEW: 24 Hour Block Check (Phone + IP)
     const clientIp = getClientIp(req);
+
+    // ✅ STRONG 24H BLOCK (PHONE + IP + DEVICE)
     const createdAtMin = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
 
     const recentRes = await shopifyFetch(
-      `/admin/api/2025-01/orders.json?status=any&created_at_min=${encodeURIComponent(createdAtMin)}&fields=id,created_at,shipping_address,billing_address,note,browser_ip&limit=50`,
+      `/admin/api/2025-01/orders.json?status=any&created_at_min=${encodeURIComponent(createdAtMin)}&fields=id,shipping_address,billing_address,note,browser_ip&limit=50`,
       { method: "GET" }
     );
 
@@ -68,45 +65,37 @@ export default async function handler(req, res) {
         const bp = o.billing_address?.phone?.replace(/\D/g, "") || "";
 
         let np = "";
+        let df = "";
         if (o.note) {
-          const m = o.note.match(/ফোন[:\- ]*([0-9+\-\s]+)/i);
-          if (m && m[1]) np = m[1].replace(/\D/g, "");
+          const m1 = o.note.match(/ফোন[:\- ]*([0-9+\-\s]+)/i);
+          if (m1 && m1[1]) np = m1[1].replace(/\D/g, "");
+          const m2 = o.note.match(/DEVICE_FP:([a-zA-Z0-9_\-]+)/i);
+          if (m2 && m2[1]) df = m2[1];
         }
 
-        const phoneMatch =
-          (sp && sp === rawPhone) ||
-          (bp && bp === rawPhone) ||
-          (np && np === rawPhone);
+        const phoneMatch = sp === rawPhone || bp === rawPhone || np === rawPhone;
+        const ipMatch = clientIp && o.browser_ip === clientIp;
+        const deviceMatch = df && df === device_fp;
 
-        const ipMatch =
-          clientIp &&
-          o.browser_ip &&
-          String(o.browser_ip).trim() === String(clientIp).trim();
-
-        return phoneMatch || ipMatch;
+        return phoneMatch || ipMatch || deviceMatch;
       });
 
       if (blocked) {
         return res.status(429).json({
           error_code: "ORDER_LIMIT_24H",
-          message: "২৪ ঘন্টার মধ্যে একই মোবাইল দিয়ে দুইবার অর্ডার করা যাবে না! হোয়াটসঅ্যাপ: 01764315836"
+          message: "২৪ ঘন্টার মধ্যে একই ডিভাইস, মোবাইল নাম্বার অথবা আইপি দিয়ে আবার অর্ডার করা যাবে না!"
         });
       }
     }
 
-    // Fetch product variant information
-    const variantRes = await shopifyFetch(`/admin/api/2025-01/variants/${variant_id}.json`, { method: "GET" });
-
+    const variantRes = await shopifyFetch(`/admin/api/2025-01/variants/${variant_id}.json`);
     if (!variantRes.ok) {
-      return res.status(500).json({ error: "Failed to fetch variant", details: variantRes.json });
+      return res.status(500).json({ error: "Variant fetch failed" });
     }
 
-    const variant = variantRes.json.variant;
-    const productName = variant.title;
-    const productPrice = Number(variant.price);
+    const productPrice = Number(variantRes.json.variant.price);
     const totalPrice = productPrice + Number(delivery_charge);
 
-    // Full order note message (UNCHANGED)
     const fullNote =
       `🔥 Landing Page Order\n` +
       `নাম: ${name}\n` +
@@ -114,15 +103,15 @@ export default async function handler(req, res) {
       `ফোন: ${rawPhone}\n` +
       `মোট: ${totalPrice}৳\n` +
       `প্রোডাক্টের কোড: ${note}\n` +
-      `প্রোডাক্ট: ${productName}\n` +
       `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
-      `ডেলিভারি চার্জ: ${delivery_charge}৳\n`;
+      `ডেলিভারি চার্জ: ${delivery_charge}৳\n` +
+      `DEVICE_FP:${device_fp}\n";
 
     const orderPayload = {
       order: {
         note: fullNote,
         source_identifier: "landing-page",
-        tags: `LandingPage, AutoSync-Manual, Delivery-${delivery_charge}`,
+        tags: `LandingPage, Delivery-${delivery_charge}`,
         financial_status: "pending",
         line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
         shipping_lines: [{ title: "Delivery Charge", price: Number(delivery_charge).toFixed(2) }],
@@ -138,7 +127,7 @@ export default async function handler(req, res) {
           address1: address,
           country: "Bangladesh"
         },
-        browser_ip: clientIp   // ✅ NEW (Only this added)
+        browser_ip: clientIp
       }
     };
 
@@ -148,13 +137,12 @@ export default async function handler(req, res) {
     });
 
     if (!orderRes.ok) {
-      return res.status(500).json({ error: "Order failed", details: orderRes.json });
+      return res.status(500).json({ error: "Order failed" });
     }
 
     return res.status(200).json({ success: true, order: orderRes.json.order });
 
   } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Server error", details: String(err) });
+    return res.status(500).json({ error: "Server error" });
   }
 }
