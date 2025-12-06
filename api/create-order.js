@@ -21,6 +21,14 @@ async function shopifyFetch(path, opts = {}) {
   return { ok: res.ok, status: res.status, json };
 }
 
+// ✅ NEW: Client IP Helper (২৪ ঘন্টার ব্লকের জন্য)
+function getClientIp(req) {
+  const xf = req.headers["x-forwarded-for"];
+  if (Array.isArray(xf)) return xf[0];
+  if (typeof xf === "string") return xf.split(",")[0].trim();
+  return req.socket?.remoteAddress || "";
+}
+
 export default async function handler(req, res) {
   const origin = req.headers.origin;
 
@@ -45,6 +53,47 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Phone must be at least 11 digits" });
     }
 
+    // ✅ NEW: 24 Hour Block Check (Phone + IP)
+    const clientIp = getClientIp(req);
+    const createdAtMin = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    const recentRes = await shopifyFetch(
+      `/admin/api/2025-01/orders.json?status=any&created_at_min=${encodeURIComponent(createdAtMin)}&fields=id,created_at,shipping_address,billing_address,note,browser_ip&limit=50`,
+      { method: "GET" }
+    );
+
+    if (recentRes.ok && recentRes.json?.orders) {
+      const blocked = recentRes.json.orders.some((o) => {
+        const sp = o.shipping_address?.phone?.replace(/\D/g, "") || "";
+        const bp = o.billing_address?.phone?.replace(/\D/g, "") || "";
+
+        let np = "";
+        if (o.note) {
+          const m = o.note.match(/ফোন[:\- ]*([0-9+\-\s]+)/i);
+          if (m && m[1]) np = m[1].replace(/\D/g, "");
+        }
+
+        const phoneMatch =
+          (sp && sp === rawPhone) ||
+          (bp && bp === rawPhone) ||
+          (np && np === rawPhone);
+
+        const ipMatch =
+          clientIp &&
+          o.browser_ip &&
+          String(o.browser_ip).trim() === String(clientIp).trim();
+
+        return phoneMatch || ipMatch;
+      });
+
+      if (blocked) {
+        return res.status(429).json({
+          error_code: "ORDER_LIMIT_24H",
+          message: "২৪ ঘন্টার মধ্যে একই মোবাইল দিয়ে দুইবার অর্ডার করা যাবে না! হোয়াটসঅ্যাপ: 01764315836"
+        });
+      }
+    }
+
     // Fetch product variant information
     const variantRes = await shopifyFetch(`/admin/api/2025-01/variants/${variant_id}.json`, { method: "GET" });
 
@@ -57,7 +106,7 @@ export default async function handler(req, res) {
     const productPrice = Number(variant.price);
     const totalPrice = productPrice + Number(delivery_charge);
 
-    // Full order note message
+    // Full order note message (UNCHANGED)
     const fullNote =
       `🔥 Landing Page Order\n` +
       `নাম: ${name}\n` +
@@ -69,7 +118,6 @@ export default async function handler(req, res) {
       `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
       `ডেলিভারি চার্জ: ${delivery_charge}৳\n`;
 
-    // Payload for Shopify only (No courier send)
     const orderPayload = {
       order: {
         note: fullNote,
@@ -89,11 +137,11 @@ export default async function handler(req, res) {
           phone: rawPhone,
           address1: address,
           country: "Bangladesh"
-        }
+        },
+        browser_ip: clientIp   // ✅ NEW (Only this added)
       }
     };
 
-    // Create Shopify order
     const orderRes = await shopifyFetch(`/admin/api/2025-01/orders.json`, {
       method: "POST",
       body: JSON.stringify(orderPayload)
@@ -109,4 +157,4 @@ export default async function handler(req, res) {
     console.error(err);
     return res.status(500).json({ error: "Server error", details: String(err) });
   }
-}  
+}
