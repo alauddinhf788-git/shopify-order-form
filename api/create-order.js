@@ -112,27 +112,34 @@ export default async function handler(req, res) {
 
     const orderPayload = {
       order: {
-        note: fullNote,
-        source_identifier: "landing-page",
-        tags: `LandingPage, AutoSync-Manual, Delivery-${delivery_charge}`,
-        financial_status: "pending",
-        line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
-        shipping_lines: [
-          { title: "Delivery Charge", price: Number(delivery_charge).toFixed(2) }
-        ],
-        shipping_address: {
-          first_name: name,
-          phone: rawPhone,
-          address1: address,
-          country: "Bangladesh"
-        },
-        billing_address: {
-          first_name: name,
-          phone: rawPhone,
-          address1: address,
-          country: "Bangladesh"
-        }
-      }
+  note: fullNote,
+  source_identifier: "landing-page",
+  tags: `LandingPage, AutoSync-Manual, Delivery-${delivery_charge}`,
+  financial_status: "pending",
+
+  customer: {
+    first_name: name,
+    phone: rawPhone,
+    email: `${rawPhone}@auto.customer`
+  },
+
+  line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
+  shipping_lines: [
+    { title: "Delivery Charge", price: Number(delivery_charge).toFixed(2) }
+  ],
+  shipping_address: {
+    first_name: name,
+    phone: rawPhone,
+    address1: address,
+    country: "Bangladesh"
+  },
+  billing_address: {
+    first_name: name,
+    phone: rawPhone,
+    address1: address,
+    country: "Bangladesh"
+  }
+}
     };
 
     const orderRes = await shopifyFetch(
