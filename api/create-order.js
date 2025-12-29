@@ -154,6 +154,72 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Order failed" });
     }
 
+const orderId = orderRes.json.order.id;
+    const eventId = "order_" + orderId;
+    const eventTime = Math.floor(Date.now() / 1000);
+
+    // --------------------
+    // FACEBOOK CAPI — PURCHASE
+    // --------------------
+    try {
+      await fetch(
+        `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_CAPI_TOKEN}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            data: [
+              {
+                event_name: "Purchase",
+                event_time: eventTime,
+                event_id: eventId,
+                action_source: "website",
+                user_data: {
+                  ph: rawPhone,
+                  client_ip_address: ip,
+                  client_user_agent: device
+                },
+                custom_data: {
+                  currency: "BDT",
+                  value: totalPrice
+                }
+              }
+            ]
+          })
+        }
+      );
+    } catch (e) {
+      console.error("FB CAPI ERROR:", e);
+    }
+
+    // --------------------
+    // TIKTOK EVENTS API — PURCHASE
+    // --------------------
+    try {
+      await fetch(
+        "https://business-api.tiktok.com/open_api/v1.3/event/track/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Token": process.env.TIKTOK_ACCESS_TOKEN
+          },
+          body: JSON.stringify({
+            pixel_code: process.env.TIKTOK_PIXEL_ID,
+            event: "CompletePayment",
+            event_id: eventId,
+            timestamp: eventTime,
+            properties: {
+              value: totalPrice,
+              currency: "BDT"
+            }
+          })
+        }
+      );
+    } catch (e) {
+      console.error("TIKTOK API ERROR:", e);
+    }
+    
     // ✅ SUCCESS হলে 24h ব্লক বসানো
     setBlock(ipKey);
     setBlock(phoneKey);
