@@ -64,25 +64,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Phone must be at least 11 digits" });
     }
 
-    // --------------------
-    // IP + Phone + Device 24h Block
-    // --------------------
-    const ip =
-      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
-      req.socket.remoteAddress;
-
-    const device = req.headers["user-agent"] || "unknown-device";
-
-    const ipKey = `ip:${ip}`;
-    const phoneKey = `phone:${rawPhone}`;
-    const deviceKey = `device:${device}`;
-
-    if (isBlocked(ipKey) || isBlocked(phoneKey) || isBlocked(deviceKey)) {
-      return res.status(429).json({
-        error: "24H_BLOCK",
-        message: "২৪ ঘন্টার মধ্যে একই ডিভাইস, আইপি অথবা ফোন নাম্বার দিয়ে পুনরায় অর্ডার করা যাবে না"
-      });
-    }
+ 
 
     // Fetch product variant
     const variantRes = await shopifyFetch(
@@ -220,4 +202,15 @@ const orderId = orderRes.json.order.id;
       console.error("TIKTOK API ERROR:", e);
     }
     
+      // ✅ SUCCESS হলে 24h ব্লক বসানো
+    setBlock(ipKey);
+    setBlock(phoneKey);
+    setBlock(deviceKey);
 
+    return res.status(200).json({ success: true, order: orderRes.json.order });
+
+  } catch (err) {
+    console.error(err);
+    return res.status(500).json({ error: "Server error" });
+  }
+}
