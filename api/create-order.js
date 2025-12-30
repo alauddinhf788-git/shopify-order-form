@@ -220,15 +220,4 @@ const orderId = orderRes.json.order.id;
       console.error("TIKTOK API ERROR:", e);
     }
     
-    // ✅ SUCCESS হলে 24h ব্লক বসানো
-    setBlock(ipKey);
-    setBlock(phoneKey);
-    setBlock(deviceKey);
 
-    return res.status(200).json({ success: true, order: orderRes.json.order });
-
-  } catch (err) {
-    console.error(err);
-    return res.status(500).json({ error: "Server error" });
-  }
-}
