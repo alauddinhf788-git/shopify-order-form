@@ -25,7 +25,9 @@ function setBlock(key) {
   BLOCK_24H.set(key, Date.now());
 }
 
-// Shopify API Helper
+// --------------------
+// Shopify Fetch Helper
+// --------------------
 async function shopifyFetch(path, opts = {}) {
   const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}${path}`;
   const headers = {
@@ -43,6 +45,9 @@ async function shopifyFetch(path, opts = {}) {
 export default async function handler(req, res) {
   const origin = req.headers.origin;
 
+  // --------------------
+  // CORS
+  // --------------------
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -50,10 +55,12 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
+  if (req.method !== "POST")
+    return res.status(405).json({ error: "Only POST allowed" });
 
   try {
-    const { name, phone, address, note, delivery_charge, variant_id } = req.body || {};
+    const { name, phone, address, note, delivery_charge, variant_id } =
+      req.body || {};
 
     if (!name || !phone || !address || !note || !variant_id) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -64,9 +71,30 @@ export default async function handler(req, res) {
       return res.status(400).json({ error: "Phone must be at least 11 digits" });
     }
 
- 
+    // --------------------
+    // IP + Device
+    // --------------------
+    const ip =
+      req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
+      req.socket.remoteAddress;
 
-    // Fetch product variant
+    const device = req.headers["user-agent"] || "unknown-device";
+
+    const ipKey = `ip:${ip}`;
+    const phoneKey = `phone:${rawPhone}`;
+    const deviceKey = `device:${device}`;
+
+    if (isBlocked(ipKey) || isBlocked(phoneKey) || isBlocked(deviceKey)) {
+      return res.status(429).json({
+        error: "24H_BLOCK",
+        message:
+          "২৪ ঘন্টার মধ্যে একই ডিভাইস, আইপি অথবা ফোন নাম্বার দিয়ে পুনরায় অর্ডার করা যাবে না"
+      });
+    }
+
+    // --------------------
+    // Fetch Variant
+    // --------------------
     const variantRes = await shopifyFetch(
       `/admin/api/2025-01/variants/${variant_id}.json`,
       { method: "GET" }
@@ -92,36 +120,42 @@ export default async function handler(req, res) {
       `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
       `ডেলিভারি চার্জ: ${delivery_charge}৳\n`;
 
+    // --------------------
+    // Create Order
+    // --------------------
     const orderPayload = {
       order: {
-  note: fullNote,
-  source_identifier: "landing-page",
-  tags: `LandingPage, AutoSync-Manual, Delivery-${delivery_charge}`,
-  financial_status: "pending",
+        note: fullNote,
+        source_identifier: "landing-page",
+        tags: `LandingPage, AutoSync-Manual, Delivery-${delivery_charge}`,
+        financial_status: "pending",
 
-  customer: {
-    first_name: name,
-    phone: rawPhone,
-    email: `${rawPhone}@auto.customer`
-  },
+        customer: {
+          first_name: name,
+          phone: rawPhone,
+          email: `${rawPhone}@auto.customer`
+        },
 
-  line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
-  shipping_lines: [
-    { title: "Delivery Charge", price: Number(delivery_charge).toFixed(2) }
-  ],
-  shipping_address: {
-    first_name: name,
-    phone: rawPhone,
-    address1: address,
-    country: "Bangladesh"
-  },
-  billing_address: {
-    first_name: name,
-    phone: rawPhone,
-    address1: address,
-    country: "Bangladesh"
-  }
-}
+        line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
+        shipping_lines: [
+          {
+            title: "Delivery Charge",
+            price: Number(delivery_charge).toFixed(2)
+          }
+        ],
+        shipping_address: {
+          first_name: name,
+          phone: rawPhone,
+          address1: address,
+          country: "Bangladesh"
+        },
+        billing_address: {
+          first_name: name,
+          phone: rawPhone,
+          address1: address,
+          country: "Bangladesh"
+        }
+      }
     };
 
     const orderRes = await shopifyFetch(
@@ -136,7 +170,7 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "Order failed" });
     }
 
-const orderId = orderRes.json.order.id;
+    const orderId = orderRes.json.order.id;
     const eventId = "order_" + orderId;
     const eventTime = Math.floor(Date.now() / 1000);
 
@@ -201,16 +235,20 @@ const orderId = orderRes.json.order.id;
     } catch (e) {
       console.error("TIKTOK API ERROR:", e);
     }
-    
-      // ✅ SUCCESS হলে 24h ব্লক বসানো
+
+    // --------------------
+    // Apply 24h Block
+    // --------------------
     setBlock(ipKey);
     setBlock(phoneKey);
     setBlock(deviceKey);
 
-    return res.status(200).json({ success: true, order: orderRes.json.order });
-
+    return res.status(200).json({
+      success: true,
+      order: orderRes.json.order
+    });
   } catch (err) {
-    console.error(err);
+    console.error("CREATE ORDER ERROR:", err);
     return res.status(500).json({ error: "Server error" });
   }
 }
