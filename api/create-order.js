@@ -59,16 +59,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Only POST allowed" });
 
   try {
-    // ✅ CHANGE–1: ttclid added
-    const {
-      name,
-      phone,
-      address,
-      note,
-      delivery_charge,
-      variant_id,
-      ttclid
-    } = req.body || {};
+    const { name, phone, address, note, delivery_charge, variant_id } =
+      req.body || {};
 
     if (!name || !phone || !address || !note || !variant_id) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -183,7 +175,7 @@ export default async function handler(req, res) {
     const eventTime = Math.floor(Date.now() / 1000);
 
     // --------------------
-    // FACEBOOK CAPI — PURCHASE (UNCHANGED)
+    // FACEBOOK CAPI — PURCHASE
     // --------------------
     try {
       await fetch(
@@ -217,7 +209,7 @@ export default async function handler(req, res) {
     }
 
     // --------------------
-    // TIKTOK EVENTS API — PURCHASE (FIXED)
+    // TIKTOK EVENTS API — PURCHASE
     // --------------------
     try {
       await fetch(
@@ -236,11 +228,6 @@ export default async function handler(req, res) {
             properties: {
               value: totalPrice,
               currency: "BDT"
-            },
-            context: {
-              ad: {
-                ttclid: ttclid || undefined // ✅ CRITICAL FIX
-              }
             }
           })
         }
