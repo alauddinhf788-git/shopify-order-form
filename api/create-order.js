@@ -59,8 +59,8 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: "Only POST allowed" });
 
   try {
-    const { name, phone, address, note, delivery_charge, variant_id } =
-      req.body || {};
+const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_event_id } =
+  req.body || {};
 
     if (!name || !phone || !address || !note || !variant_id) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -212,26 +212,27 @@ export default async function handler(req, res) {
     // TIKTOK EVENTS API — PURCHASE
     // --------------------
     try {
-      await fetch(
-        "https://business-api.tiktok.com/open_api/v1.3/event/track/",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Token": process.env.TIKTOK_ACCESS_TOKEN
-          },
-          body: JSON.stringify({
-            pixel_code: process.env.TIKTOK_PIXEL_ID,
-            event: "CompletePayment",
-            event_id: eventId,
-            timestamp: eventTime,
-            properties: {
-              value: totalPrice,
-              currency: "BDT"
-            }
-          })
-        }
-      );
+await fetch(
+  "https://business-api.tiktok.com/open_api/v1.3/event/track/",
+  {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "Access-Token": process.env.TIKTOK_ACCESS_TOKEN
+    },
+    body: JSON.stringify({
+      pixel_code: process.env.TIKTOK_PIXEL_ID,
+      event: "CompletePayment",
+      event_id: tiktok_event_id,
+      timestamp: eventTime,
+      properties: {
+        value: totalPrice,
+        currency: "BDT",
+        ttclid: ttclid || undefined
+      }
+    })
+  }
+);
     } catch (e) {
       console.error("TIKTOK API ERROR:", e);
     }
