@@ -18,7 +18,7 @@ export default async function handler(req, res) {
 
     const payload = {
       pixel_code: process.env.TIKTOK_PIXEL_ID,
-      event: "Purchase",
+      event: "CompletePayment",
       timestamp: eventTime,
       event_id: String(order.id), // 🔁 Deduplication key
       context: {
