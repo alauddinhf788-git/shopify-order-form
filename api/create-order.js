@@ -1,19 +1,23 @@
 // /api/create-order.js
 
-const allowedOrigins = (process.env.ALLOWED_ORIGIN || "")
-  .split(",")
-  .map((s) => s.trim())
-  .filter(Boolean);
+// ====================
+// 24H BLOCK ENABLE FLAG
+// ====================
+// false করলে ২৪ ঘন্টার ব্লক পুরোপুরি বন্ধ হয়ে যাবে
+const ENABLE_24H_BLOCK = true;
 
-// --------------------
-// 24 Hour Block Store (Memory)
-// --------------------
+// ============================
+// 24 Hour Block System (ISOLATED)
+// ============================
 const BLOCK_24H = global.BLOCK_24H || new Map();
 global.BLOCK_24H = BLOCK_24H;
 
 function isBlocked(key) {
+  if (!ENABLE_24H_BLOCK) return false;
+
   const t = BLOCK_24H.get(key);
   if (!t) return false;
+
   if (Date.now() - t > 24 * 60 * 60 * 1000) {
     BLOCK_24H.delete(key);
     return false;
@@ -22,12 +26,21 @@ function isBlocked(key) {
 }
 
 function setBlock(key) {
+  if (!ENABLE_24H_BLOCK) return;
   BLOCK_24H.set(key, Date.now());
 }
 
-// --------------------
+// ====================
+// Allowed Origins
+// ====================
+const allowedOrigins = (process.env.ALLOWED_ORIGIN || "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
+
+// ====================
 // Shopify Fetch Helper
-// --------------------
+// ====================
 async function shopifyFetch(path, opts = {}) {
   const url = `https://${process.env.SHOPIFY_STORE_DOMAIN}${path}`;
   const headers = {
@@ -45,9 +58,9 @@ async function shopifyFetch(path, opts = {}) {
 export default async function handler(req, res) {
   const origin = req.headers.origin;
 
-  // --------------------
+  // ====================
   // CORS
-  // --------------------
+  // ====================
   if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
     res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
@@ -55,12 +68,21 @@ export default async function handler(req, res) {
   }
 
   if (req.method === "OPTIONS") return res.status(200).end();
-  if (req.method !== "POST")
+  if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST allowed" });
+  }
 
   try {
-const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_event_id } =
-  req.body || {};
+    const {
+      name,
+      phone,
+      address,
+      note,
+      delivery_charge,
+      variant_id,
+      ttclid,
+      tiktok_event_id
+    } = req.body || {};
 
     if (!name || !phone || !address || !note || !variant_id) {
       return res.status(400).json({ error: "Missing required fields" });
@@ -71,9 +93,9 @@ const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_
       return res.status(400).json({ error: "Phone must be at least 11 digits" });
     }
 
-    // --------------------
+    // ====================
     // IP + Device
-    // --------------------
+    // ====================
     const ip =
       req.headers["x-forwarded-for"]?.split(",")[0]?.trim() ||
       req.socket.remoteAddress;
@@ -84,7 +106,11 @@ const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_
     const phoneKey = `phone:${rawPhone}`;
     const deviceKey = `device:${device}`;
 
-    if (isBlocked(ipKey) || isBlocked(phoneKey) || isBlocked(deviceKey)) {
+    if (
+      isBlocked(ipKey) ||
+      isBlocked(phoneKey) ||
+      isBlocked(deviceKey)
+    ) {
       return res.status(429).json({
         error: "24H_BLOCK",
         message:
@@ -92,9 +118,9 @@ const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_
       });
     }
 
-    // --------------------
+    // ====================
     // Fetch Variant
-    // --------------------
+    // ====================
     const variantRes = await shopifyFetch(
       `/admin/api/2025-01/variants/${variant_id}.json`,
       { method: "GET" }
@@ -120,9 +146,9 @@ const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_
       `প্রোডাক্ট মূল্য: ${productPrice}৳\n` +
       `ডেলিভারি চার্জ: ${delivery_charge}৳\n`;
 
-    // --------------------
+    // ====================
     // Create Order
-    // --------------------
+    // ====================
     const orderPayload = {
       order: {
         note: fullNote,
@@ -137,18 +163,21 @@ const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_
         },
 
         line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
+
         shipping_lines: [
           {
             title: "Delivery Charge",
             price: Number(delivery_charge).toFixed(2)
           }
         ],
+
         shipping_address: {
           first_name: name,
           phone: rawPhone,
           address1: address,
           country: "Bangladesh"
         },
+
         billing_address: {
           first_name: name,
           phone: rawPhone,
@@ -174,9 +203,9 @@ const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_
     const eventId = "order_" + orderId;
     const eventTime = Math.floor(Date.now() / 1000);
 
-    // --------------------
+    // ====================
     // FACEBOOK CAPI — PURCHASE
-    // --------------------
+    // ====================
     try {
       await fetch(
         `https://graph.facebook.com/v18.0/${process.env.FB_PIXEL_ID}/events?access_token=${process.env.FB_CAPI_TOKEN}`,
@@ -208,38 +237,38 @@ const { name, phone, address, note, delivery_charge, variant_id, ttclid, tiktok_
       console.error("FB CAPI ERROR:", e);
     }
 
-    // --------------------
+    // ====================
     // TIKTOK EVENTS API — PURCHASE
-    // --------------------
+    // ====================
     try {
-await fetch(
-  "https://business-api.tiktok.com/open_api/v1.3/event/track/",
-  {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "Access-Token": process.env.TIKTOK_ACCESS_TOKEN
-    },
-    body: JSON.stringify({
-      pixel_code: process.env.TIKTOK_PIXEL_ID,
-      event: "CompletePayment",
-      event_id: tiktok_event_id,
-      timestamp: eventTime,
-      properties: {
-        value: totalPrice,
-        currency: "BDT",
-        ttclid: ttclid || undefined
-      }
-    })
-  }
-);
+      await fetch(
+        "https://business-api.tiktok.com/open_api/v1.3/event/track/",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "Access-Token": process.env.TIKTOK_ACCESS_TOKEN
+          },
+          body: JSON.stringify({
+            pixel_code: process.env.TIKTOK_PIXEL_ID,
+            event: "Purchase",
+            event_id: tiktok_event_id || eventId,
+            timestamp: eventTime,
+            properties: {
+              value: totalPrice,
+              currency: "BDT",
+              ttclid: ttclid || undefined
+            }
+          })
+        }
+      );
     } catch (e) {
       console.error("TIKTOK API ERROR:", e);
     }
 
-    // --------------------
-    // Apply 24h Block
-    // --------------------
+    // ====================
+    // Apply 24H Block
+    // ====================
     setBlock(ipKey);
     setBlock(phoneKey);
     setBlock(deviceKey);
@@ -248,6 +277,7 @@ await fetch(
       success: true,
       order: orderRes.json.order
     });
+
   } catch (err) {
     console.error("CREATE ORDER ERROR:", err);
     return res.status(500).json({ error: "Server error" });
