@@ -251,7 +251,7 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({
             pixel_code: process.env.TIKTOK_PIXEL_ID,
-            event: "Purchase",
+            event: "CompletePayment",
             event_id: tiktok_event_id || eventId,
             timestamp: eventTime,
             properties: {
