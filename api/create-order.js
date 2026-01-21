@@ -4,7 +4,7 @@
 // 24H BLOCK ENABLE FLAG
 // ====================
 // false করলে ২৪ ঘন্টার ব্লক পুরোপুরি বন্ধ হয়ে যাবে
-const ENABLE_24H_BLOCK = true;
+const ENABLE_24H_BLOCK = false;
 
 // ============================
 // 24 Hour Block System (ISOLATED)
