@@ -1,5 +1,3 @@
-// /api/shopify-order-paid.js
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({ error: "Only POST allowed" });
@@ -8,27 +6,30 @@ export default async function handler(req, res) {
   try {
     const order = req.body;
 
-    // ✅ Paid order check
+    // ✅ ONLY PAID
     if (!order || order.financial_status !== "paid") {
       return res.status(200).json({ skipped: true });
     }
 
-    // 🔑 TikTok required data
     const eventTime = Math.floor(Date.now() / 1000);
+    const eventId = "order_" + order.id;
 
     const payload = {
       pixel_code: process.env.TIKTOK_PIXEL_ID,
-      event: "CompletePayment",
+      event: "Purchase",
+      event_id: eventId,
       timestamp: eventTime,
-      event_id: String(order.id), // 🔁 Deduplication key
       context: {
         page: {
           url: order.order_status_url || "",
         },
         user: {
-          external_id: order.customer?.id
-            ? String(order.customer.id)
-            : String(order.email || order.phone || order.id),
+          external_id: String(
+            order.customer?.id ||
+            order.email ||
+            order.phone ||
+            order.id
+          ),
         },
       },
       properties: {
@@ -43,8 +44,7 @@ export default async function handler(req, res) {
       },
     };
 
-    // 🚀 Send to TikTok Events API
-    const tiktokRes = await fetch(
+    await fetch(
       "https://business-api.tiktok.com/open_api/v1.3/event/track/",
       {
         method: "POST",
@@ -56,11 +56,8 @@ export default async function handler(req, res) {
       }
     );
 
-    const tiktokData = await tiktokRes.json();
-
-    console.log("TikTok response:", tiktokData);
-
     return res.status(200).json({ success: true });
+
   } catch (err) {
     console.error("Webhook error:", err);
     return res.status(500).json({ error: "Server error" });
