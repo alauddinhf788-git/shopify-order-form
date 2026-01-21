@@ -237,34 +237,6 @@ export default async function handler(req, res) {
       console.error("FB CAPI ERROR:", e);
     }
 
-    // ====================
-    // TIKTOK EVENTS API — PURCHASE
-    // ====================
-    try {
-      await fetch(
-        "https://business-api.tiktok.com/open_api/v1.3/event/track/",
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            "Access-Token": process.env.TIKTOK_ACCESS_TOKEN
-          },
-          body: JSON.stringify({
-            pixel_code: process.env.TIKTOK_PIXEL_ID,
-            event: "CompletePayment",
-            event_id: tiktok_event_id || eventId,
-            timestamp: eventTime,
-            properties: {
-              value: totalPrice,
-              currency: "BDT",
-              ttclid: ttclid || undefined
-            }
-          })
-        }
-      );
-    } catch (e) {
-      console.error("TIKTOK API ERROR:", e);
-    }
 
     // ====================
     // Apply 24H Block
