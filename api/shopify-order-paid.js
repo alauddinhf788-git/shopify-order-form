@@ -1,20 +1,20 @@
 // /api/shopify-order-paid.js
 
 export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Only POST allowed" });
-  }
+  if (req.method !== "POST") return res.status(405).json({ error: "Only POST allowed" });
 
   try {
     const order = req.body;
 
-    // ✅ ONLY PAID
-    if (!order || order.financial_status !== "paid") {
-      return res.status(200).json({ skipped: true });
-    }
+    if (!order || order.financial_status !== "paid") return res.status(200).json({ skipped: true });
 
     const eventTime = Math.floor(Date.now() / 1000);
     const eventId = "order_" + order.id;
+
+    // Prevent duplicate server-side fire (optional)
+    if (global.TIKTOK_FIRED_EVENTS?.has(eventId)) return res.status(200).json({ skipped: true });
+    global.TIKTOK_FIRED_EVENTS = global.TIKTOK_FIRED_EVENTS || new Set();
+    global.TIKTOK_FIRED_EVENTS.add(eventId);
 
     const payload = {
       pixel_code: process.env.TIKTOK_PIXEL_ID,
@@ -22,17 +22,15 @@ export default async function handler(req, res) {
       event_id: eventId,
       timestamp: eventTime,
       context: {
-        page: {
-          url: order.order_status_url || "",
-        },
+        page: { url: order.order_status_url || "" },
         user: {
           external_id: String(
             order.customer?.id ||
             order.email ||
             order.phone ||
             order.id
-          ),
-        },
+          )
+        }
       },
       properties: {
         currency: order.currency || "BDT",
@@ -41,9 +39,9 @@ export default async function handler(req, res) {
           content_id: String(item.product_id),
           content_type: "product",
           quantity: item.quantity,
-          price: parseFloat(item.price),
-        })),
-      },
+          price: parseFloat(item.price)
+        }))
+      }
     };
 
     await fetch(
@@ -52,9 +50,9 @@ export default async function handler(req, res) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Access-Token": process.env.TIKTOK_ACCESS_TOKEN,
+          "Access-Token": process.env.TIKTOK_ACCESS_TOKEN
         },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(payload)
       }
     );
 
