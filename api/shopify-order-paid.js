@@ -1,4 +1,4 @@
-// shopify-order-paid.js
+// /api/shopify-order-paid.js
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
