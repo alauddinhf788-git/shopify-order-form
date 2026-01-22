@@ -14,10 +14,8 @@ async function shopifyFetch(path, opts = {}) {
     "Content-Type": "application/json",
     ...(opts.headers || {})
   };
-
   const res = await fetch(url, { ...opts, headers });
   const json = await res.json().catch(() => null);
-
   return { ok: res.ok, status: res.status, json };
 }
 
@@ -26,7 +24,7 @@ export default async function handler(req, res) {
 
   // CORS SETUP
   if (allowedOrigins.length === 0) {
-    res.setHeader("Access-Control-Allow-Origin", "*"); // Dev mode fallback
+    res.setHeader("Access-Control-Allow-Origin", "*"); // Dev fallback
   } else if (allowedOrigins.includes(origin)) {
     res.setHeader("Access-Control-Allow-Origin", origin);
   }
@@ -41,26 +39,24 @@ export default async function handler(req, res) {
   if (!order_id) return res.status(400).json({ error: "order_id missing" });
 
   try {
-    const orderRes = await shopifyFetch(`/admin/api/2025-01/orders/${order_id}.json`, {
-      method: "GET",
-    });
+    const orderRes = await shopifyFetch(`/admin/api/2025-01/orders/${order_id}.json`, { method: "GET" });
+    if (!orderRes.ok) return res.status(500).json({ error: "Failed to fetch order", details: orderRes.json });
 
-    if (!orderRes.ok) {
-      return res.status(500).json({
-        error: "Failed to fetch order",
-        details: orderRes.json,
-      });
+    // ✅ Pass-through ttclid if exists in order.note
+    let ttclid = null;
+    if (orderRes.json?.order?.note) {
+      const noteLines = orderRes.json.order.note.split("\n").map(l => l.trim());
+      const ttclidLine = noteLines.find(l => l.startsWith("ttclid:"));
+      if (ttclidLine) ttclid = ttclidLine.split(":")[1].trim();
     }
 
     return res.status(200).json({
       success: true,
       order: orderRes.json.order,
+      ttclid
     });
   } catch (err) {
     console.error("get-order ERROR:", err);
-    return res.status(500).json({
-      error: "Server error",
-      details: String(err),
-    });
+    return res.status(500).json({ error: "Server error", details: String(err) });
   }
 }
