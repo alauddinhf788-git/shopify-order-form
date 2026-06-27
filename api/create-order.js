@@ -167,7 +167,7 @@ export default async function handler(req, res) {
         note: fullNote,
         source_identifier: "landing-page",
         tags: `LandingPage, AutoSync-Manual, Delivery-${delivery_charge}`,
-        financial_status: "pending",
+        financial_status: (totalPrice === 0) ? "paid" : "pending",
         customer: { first_name: name, phone: rawPhone, email: `${rawPhone}@auto.customer` },
         line_items: [{ variant_id: Number(variant_id), quantity: 1 }],
         shipping_lines: [{ title: "Delivery Charge", price: Number(delivery_charge).toFixed(2) }],
