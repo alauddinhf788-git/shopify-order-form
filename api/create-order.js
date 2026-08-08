@@ -73,6 +73,7 @@ async function sendTikTokPurchase({
   const payload = {
     event_source: "web",
     event_source_id: process.env.TIKTOK_PIXEL_ID,
+    test_event_code: "TEST11699",
     data: [
       {
         event: "CompletePayment",
