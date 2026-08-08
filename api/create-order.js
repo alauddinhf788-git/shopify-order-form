@@ -4,7 +4,7 @@ import crypto from "crypto";
 // ====================
 // 24H BLOCK ENABLE FLAG
 // ====================
-const ENABLE_24H_BLOCK = false;
+const ENABLE_24H_BLOCK = true;
 
 // ============================
 // 24 Hour Block System (ISOLATED)
