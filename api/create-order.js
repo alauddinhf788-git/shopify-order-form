@@ -65,7 +65,6 @@ async function sendTikTokPurchase({
 }) {
   if (!process.env.TIKTOK_PIXEL_ID || !process.env.TIKTOK_ACCESS_TOKEN) return;
 
-  // Phone number Hashing (SHA-256)
   const hashedPhone = phone
     ? crypto.createHash("sha256").update(phone.trim()).digest("hex")
     : "";
@@ -84,6 +83,11 @@ async function sendTikTokPurchase({
           ttclid: ttclid || undefined,
           ip: ip || undefined,
           user_agent: device || undefined
+        },
+        context: {
+          page: {
+            url: `https://${process.env.SHOPIFY_STORE_DOMAIN}/pages/thank-you?order_id=${orderId}`
+          }
         },
         properties: {
           value: Number(totalPrice),
