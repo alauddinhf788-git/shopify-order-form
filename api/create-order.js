@@ -1,4 +1,5 @@
 // /api/create-order.js
+import crypto from "crypto";
 
 // ====================
 // 24H BLOCK ENABLE FLAG
@@ -58,27 +59,47 @@ async function sendTikTokPurchase({
   orderId,
   totalPrice,
   currency = "BDT",
-  phone
+  phone,
+  ip,
+  device
 }) {
   if (!process.env.TIKTOK_PIXEL_ID || !process.env.TIKTOK_ACCESS_TOKEN) return;
 
+  // Phone number Hashing (SHA-256)
+  const hashedPhone = phone
+    ? crypto.createHash("sha256").update(phone.trim()).digest("hex")
+    : "";
+
   const payload = {
-    pixel_code: process.env.TIKTOK_PIXEL_ID,
-    event: "Purchase",
-    event_id: "order_" + orderId,
-    timestamp: Math.floor(Date.now() / 1000),
-    context: {
-      page: { url: "" },
-      user: {
-        external_id: phone || orderId,
-        client_ttclid: ttclid || undefined
+    event_source: "web",
+    event_source_id: process.env.TIKTOK_PIXEL_ID,
+    data: [
+      {
+        event: "CompletePayment",
+        event_id: "order_" + orderId,
+        event_time: Math.floor(Date.now() / 1000),
+        user: {
+          phone_number: hashedPhone || undefined,
+          ttclid: ttclid || undefined,
+          ip: ip || undefined,
+          user_agent: device || undefined
+        },
+        properties: {
+          value: Number(totalPrice),
+          currency: currency,
+          contents: [
+            {
+              price: Number(totalPrice),
+              quantity: 1
+            }
+          ]
+        }
       }
-    },
-    properties: { value: Number(totalPrice), currency }
+    ]
   };
 
   try {
-    await fetch(
+    const res = await fetch(
       "https://business-api.tiktok.com/open_api/v1.3/event/track/",
       {
         method: "POST",
@@ -89,6 +110,8 @@ async function sendTikTokPurchase({
         body: JSON.stringify(payload)
       }
     );
+    const result = await res.json();
+    console.log("TikTok S2S Response:", result);
   } catch (err) {
     console.error("TikTok S2S ERROR:", err);
   }
@@ -193,7 +216,15 @@ export default async function handler(req, res) {
     // ===============================
     // TikTok S2S Purchase Event
     // ===============================
-    await sendTikTokPurchase({ ttclid, orderId, totalPrice, currency: "BDT", phone: rawPhone });
+    await sendTikTokPurchase({
+      ttclid,
+      orderId,
+      totalPrice,
+      currency: "BDT",
+      phone: rawPhone,
+      ip,
+      device
+    });
 
     return res.status(200).json({ success: true, order: orderRes.json.order });
   } catch (err) {
